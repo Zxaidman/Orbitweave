@@ -2,11 +2,16 @@
 
 **Orbitweave** is a web puzzle where a mechanically legal 3×3 cube and a circular orbit graph are two synchronized interfaces to the same puzzle state.
 
-A cube turn immediately changes the graph. A graph turn performs the same legal cube transformation. The long-term design can introduce more advanced graph transformations, but `v0.1.0` intentionally keeps the mapping one graph action → one standard Rubik-style face turn.
+A cube turn immediately changes the graph. A graph turn performs the same legal cube transformation. The long-term design can introduce more advanced graph transformations, but the initial prototype intentionally keeps the mapping one graph action → one standard Rubik-style face turn.
 
 ## Version
 
-`0.1.0` — Cube + Orbit Graph Prototype
+`0.1.1` — Dependency compatibility patch for the Cube + Orbit Graph Prototype
+
+
+## v0.1.1 patch
+
+`v0.1.1` pins React and React DOM to `19.2.8`, which is inside the peer-dependency range required by `@react-three/fiber@9.7.0` (`>=19 <19.3`). It also aligns the React type packages to the 19.2 line. This fixes the `npm install` dependency-resolution failure present in `v0.1.0`.
 
 ## Stack
 
@@ -90,24 +95,14 @@ No server runtime or database is required for `v0.1.0`.
 
 ## Git bundle import
 
-The release bundle is designed to fast-forward the existing `Zxaidman/Orbitweave` `main` branch from its original README-only commit.
-
-From a local clone of the GitHub repository:
+For the `v0.1.1` dependency patch, start from a local repository already containing `v0.1.0` (`ed28194`).
 
 ```powershell
 cd C:\path\to\Orbitweave
-git pull "$HOME\Downloads\orbitweave-v0.1.0.bundle" main --ff-only
+git pull "$HOME\Downloads\orbitweave-v0.1.1.bundle" main --ff-only
+git fetch "$HOME\Downloads\orbitweave-v0.1.1.bundle" refs/tags/v0.1.1:refs/tags/v0.1.1
 git push origin main
-git push origin v0.1.0
-```
-
-To inspect before merging instead:
-
-```powershell
-git fetch "$HOME\Downloads\orbitweave-v0.1.0.bundle" main:bundle-v0.1.0
-git diff main..bundle-v0.1.0
-git merge --ff-only bundle-v0.1.0
-git push origin main
+git push origin v0.1.1
 ```
 
 ## Project structure
