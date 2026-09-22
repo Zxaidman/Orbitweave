@@ -3,6 +3,7 @@ import {
   FACE_COLORS,
   faceForNormal,
   homeStickerNormals,
+  transformVec,
   type Face,
   type MoveDirection,
 } from '@/game/cube';
@@ -22,12 +23,20 @@ const handleAngles: Record<Face, number> = {
   B: 210,
 };
 
-function primaryColor(homeNormals: ReturnType<typeof homeStickerNormals>): string {
-  const preferred = homeNormals.find((normal) => normal[1] !== 0)
-    ?? homeNormals.find((normal) => normal[2] !== 0)
-    ?? homeNormals[0];
-  return preferred ? FACE_COLORS[faceForNormal(preferred)] : '#e2e8f0';
+function stickerPipOffset(normal: readonly [number, number, number]) {
+  const key = normal.join(',');
+  const angleByNormal: Record<string, number> = {
+    '1,0,0': 0,
+    '0,0,1': 60,
+    '0,1,0': 120,
+    '-1,0,0': 180,
+    '0,0,-1': 240,
+    '0,-1,0': 300,
+  };
+  const angle = ((angleByNormal[key] ?? 0) * Math.PI) / 180;
+  return { x: Math.cos(angle) * 4.5, y: Math.sin(angle) * 4.5 };
 }
+
 
 function pointOnCircle(angleDegrees: number, radius: number) {
   const angle = (angleDegrees * Math.PI) / 180;
@@ -149,20 +158,36 @@ export function OrbitGraph() {
 
         <g className="graph-nodes">
           {nodes.map((node) => {
-            const color = primaryColor(homeStickerNormals(node.cubie));
             const isSelected = node.id === selectedNodeId;
+            const stickers = homeStickerNormals(node.cubie);
             return (
               <g key={node.id}>
                 <circle
                   cx={CENTER + node.x}
                   cy={CENTER + node.y}
-                  r={isSelected ? 10 : 8}
-                  fill={color}
+                  r={isSelected ? 12 : 10}
+                  fill="#0b1422"
                   className={isSelected ? 'node selected' : 'node'}
                   onPointerDown={(event) => beginNodeDrag(event, node.id)}
                   onPointerUp={finishNodeDrag}
                   onPointerCancel={() => { drag.current = null; }}
                 />
+                <g className="node-pips" pointerEvents="none">
+                  {stickers.map((homeNormal) => {
+                    const currentNormal = transformVec(node.cubie.orientation, homeNormal);
+                    const offset = stickerPipOffset(currentNormal);
+                    const color = FACE_COLORS[faceForNormal(homeNormal)];
+                    return (
+                      <circle
+                        key={`${node.id}-${homeNormal.join(',')}`}
+                        cx={CENTER + node.x + offset.x}
+                        cy={CENTER + node.y + offset.y}
+                        r="2.7"
+                        fill={color}
+                      />
+                    );
+                  })}
+                </g>
               </g>
             );
           })}

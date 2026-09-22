@@ -73,6 +73,7 @@ npm run preview
 - The cube is mechanically constrained to legal 3×3 face turns.
 - The graph contains the 20 movable physical pieces: 8 corners + 12 edges.
 - Graph edges represent current corner↔edge adjacency on the cube surface.
+- Each graph node carries 2–3 colored orientation pips, so piece orientation changes are visible as well as permutation changes.
 - Top, middle, and bottom piece layers are projected onto three concentric graph tracks.
 - Cube and graph never maintain separate authoritative state; both render from one canonical puzzle model.
 - A puzzle is solved only when all movable pieces return to solved position and orientation.

@@ -33,7 +33,7 @@ Three concentric tracks project the current cube layer:
 - middle orbit → current equatorial layer
 - outer orbit → current lower layer
 
-Graph connections link corner and edge pieces that are adjacent in the current cube state.
+Graph connections link corner and edge pieces that are adjacent in the current cube state. Each node also shows colored orientation pips derived from that piece’s current 3D orientation, so the graph does not lose flip/twist information.
 
 ## v0.1.0 interaction grammar
 
