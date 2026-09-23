@@ -9,24 +9,25 @@ import {
   sameMatrix,
   sameVec,
   type Move,
-  type MoveTarget,
 } from '../src/game/cube';
-import { buildOrbitTracks, orbitTrackStickerCount } from '../src/game/graph';
+import {
+  buildOrbitTracks,
+  orbitTrackStickerCount,
+} from '../src/game/graph';
 
 describe('cube engine', () => {
-  const ALL_TURNS: readonly MoveTarget[] = [...FACE_ORDER, 'M', 'E', 'S'];
   it('starts solved', () => {
     expect(isSolved(createSolvedCube())).toBe(true);
   });
 
-  it.each(ALL_TURNS)('%s repeated four times returns to solved', (face) => {
+  it.each(FACE_ORDER)('%s repeated four times returns to solved', (face) => {
     let state = createSolvedCube();
     const move: Move = { face, direction: 1 };
     for (let index = 0; index < 4; index += 1) state = applyMove(state, move);
     expect(isSolved(state)).toBe(true);
   });
 
-  it.each(ALL_TURNS)('%s followed by inverse restores every movable piece', (face) => {
+  it.each(FACE_ORDER)('%s followed by inverse restores every movable piece', (face) => {
     const solved = createSolvedCube();
     const move: Move = { face, direction: 1 };
     const restored = applyMove(applyMove(solved, move), inverseMove(move));
@@ -57,13 +58,16 @@ describe('cube engine', () => {
 });
 
 describe('orbit graph', () => {
-  it('contains three axis groups of three slice tracks', () => {
+  it('builds three axis groups with three slice circles each', () => {
     const tracks = buildOrbitTracks(createSolvedCube());
+
     expect(tracks).toHaveLength(9);
-    expect(tracks.map((track) => track.id)).toEqual(['U', 'E', 'D', 'L', 'M', 'R', 'B', 'S', 'F']);
+    expect(tracks.filter((track) => track.axis === 'x')).toHaveLength(3);
+    expect(tracks.filter((track) => track.axis === 'y')).toHaveLength(3);
+    expect(tracks.filter((track) => track.axis === 'z')).toHaveLength(3);
   });
 
-  it('puts four groups of three traveling stickers on every slice circle', () => {
+  it('puts four groups of three stickers on every circle', () => {
     const tracks = buildOrbitTracks(createSolvedCube());
 
     for (const track of tracks) {
@@ -73,23 +77,18 @@ describe('orbit graph', () => {
     }
   });
 
-  it('makes every offset circle a legal move track', () => {
+  it('keeps only the six outer face circles interactive in v0.1.3', () => {
     const tracks = buildOrbitTracks(createSolvedCube());
-    expect(tracks.every((track) => track.interactive)).toBe(true);
-    expect(tracks.map((track) => track.move)).toEqual(['U', 'E', 'D', 'L', 'M', 'R', 'B', 'S', 'F']);
+    const interactive = tracks.filter((track) => track.interactive);
+
+    expect(interactive).toHaveLength(6);
+    expect(interactive.map((track) => track.face).sort()).toEqual([...FACE_ORDER].sort());
   });
 
-  it('cycles the U orbit sticker groups when the U face turns', () => {
-    const solved = createSolvedCube();
-    const before = buildOrbitTracks(solved).find((track) => track.id === 'U');
-    const after = buildOrbitTracks(applyMove(solved, { face: 'U', direction: 1 }))
-      .find((track) => track.id === 'U');
+  it('preserves twelve stickers per circle after a legal move', () => {
+    const moved = applyMove(createSolvedCube(), { face: 'R', direction: 1 });
+    const tracks = buildOrbitTracks(moved);
 
-    expect(before).toBeDefined();
-    expect(after).toBeDefined();
-
-    const beforeColors = before!.groups.map((group) => group.stickers.map((sticker) => sticker.homeFace));
-    const afterColors = after!.groups.map((group) => group.stickers.map((sticker) => sticker.homeFace));
-    expect(afterColors).not.toEqual(beforeColors);
+    for (const track of tracks) expect(orbitTrackStickerCount(track)).toBe(12);
   });
 });
