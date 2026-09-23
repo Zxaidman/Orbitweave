@@ -95,22 +95,52 @@ button { -webkit-tap-highlight-color: transparent; }
 .cube-canvas canvas { display: block; }
 
 .graph-shell { height: 570px; display: grid; place-items: center; padding-top: 34px; position: relative; }
-.orbit-graph { width: min(94%, 510px); height: min(94%, 510px); touch-action: none; user-select: none; overflow: visible; }
-.graph-rings circle { fill: none; stroke: rgba(125, 154, 184, .24); stroke-width: 1.1; stroke-dasharray: 2 5; }
-.graph-rings .outer-ring { stroke: rgba(125,211,252,.19); stroke-dasharray: none; }
-.graph-edges line { stroke: rgba(139, 165, 192, .28); stroke-width: 1.1; transition: all .21s cubic-bezier(.2,.75,.25,1); }
-.node { cursor: grab; stroke: rgba(255,255,255,.58); stroke-width: 1.4; transition: cx .21s cubic-bezier(.2,.75,.25,1), cy .21s cubic-bezier(.2,.75,.25,1), r .15s ease, stroke-width .15s ease; filter: drop-shadow(0 0 4px rgba(255,255,255,.08)); }
-.node:active { cursor: grabbing; }
-.node.selected { stroke: #fff; stroke-width: 3; filter: url(#glow); }
-.face-handle { cursor: grab; user-select: none; }
-.face-handle:active { cursor: grabbing; }
-.face-handle circle { stroke: rgba(255,255,255,.38); stroke-width: 1.3; filter: drop-shadow(0 3px 7px rgba(0,0,0,.35)); }
-.face-handle text { font-size: 10px; font-weight: 850; fill: #07101d; pointer-events: none; }
-.graph-instructions { position: absolute; left: 22px; right: 22px; bottom: 15px; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); text-align: center; }
-.graph-instructions > span { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; }
-.graph-instructions small { font-size: .7rem; }
-.selected-face-actions { display: flex; gap: 5px; }
-.selected-face-actions button { padding: 5px 8px; font-size: .73rem; border-radius: 7px; }
+.orbit-graph { width: min(96%, 540px); height: min(96%, 540px); touch-action: none; user-select: none; overflow: visible; }
+.orbit-axis-label { fill: rgba(148, 163, 184, .38); font-size: 12px; font-weight: 800; letter-spacing: .14em; }
+.orbit-track-line {
+  fill: none;
+  stroke: rgba(148, 163, 184, .31);
+  stroke-width: 1.3;
+  transition: stroke .16s ease, stroke-width .16s ease, filter .16s ease;
+}
+.orbit-track.structural .orbit-track-line { stroke: rgba(125, 154, 184, .22); stroke-dasharray: 3 5; }
+.orbit-track.interactive .orbit-track-line { stroke: rgba(173, 198, 221, .40); }
+.orbit-track.active .orbit-track-line {
+  stroke: rgba(125, 211, 252, .9);
+  stroke-width: 2.4;
+  filter: url(#orbit-node-glow);
+}
+.orbit-sticker {
+  stroke: rgba(7, 16, 29, .9);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.45));
+  transition: cx .22s cubic-bezier(.2,.75,.25,1), cy .22s cubic-bezier(.2,.75,.25,1), fill .16s ease;
+}
+.orbit-face-label circle { stroke: rgba(255,255,255,.55); stroke-width: 1.2; filter: drop-shadow(0 2px 5px rgba(0,0,0,.4)); }
+.orbit-face-label text { fill: #07101d; font-size: 9px; font-weight: 900; pointer-events: none; }
+.orbit-slice-label { fill: rgba(148, 163, 184, .6); font-size: 9px; font-weight: 800; }
+.orbit-track-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 20;
+  cursor: grab;
+  touch-action: none;
+}
+.orbit-track-hit:active { cursor: grabbing; }
+.graph-instructions {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 13px;
+  min-height: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+.graph-instructions small { max-width: 520px; font-size: .69rem; line-height: 1.45; }
 
 .control-deck { margin-top: 16px; display: grid; grid-template-columns: minmax(220px,.85fr) minmax(480px,1.8fr) minmax(220px,.85fr); gap: 12px; }
 .control-deck > div { min-height: 94px; border: 1px solid var(--line); border-radius: 16px; background: rgba(11,24,40,.72); padding: 14px 16px; }
