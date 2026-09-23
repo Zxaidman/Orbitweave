@@ -1,5 +1,7 @@
 export type Axis = 'x' | 'y' | 'z';
 export type Face = 'U' | 'D' | 'L' | 'R' | 'F' | 'B';
+export type Slice = 'M' | 'E' | 'S';
+export type MoveTarget = Face | Slice;
 export type MoveDirection = 1 | -1;
 export type Vec3 = readonly [number, number, number];
 export type Mat3 = readonly [
@@ -9,7 +11,7 @@ export type Mat3 = readonly [
 ];
 
 export interface Move {
-  face: Face;
+  face: MoveTarget;
   direction: MoveDirection;
 }
 
@@ -36,23 +38,43 @@ export const FACE_COLORS: Record<Face, string> = {
 };
 
 export const FACE_ORDER: readonly Face[] = ['U', 'R', 'F', 'D', 'L', 'B'];
+export const SLICE_ORDER: readonly Slice[] = ['M', 'E', 'S'];
+export const MOVE_ORDER: readonly MoveTarget[] = [...FACE_ORDER, ...SLICE_ORDER];
 
 interface MoveMeta {
   axis: Axis;
-  layer: 1 | -1;
+  layer: -1 | 0 | 1;
   clockwiseQuarter: 1 | -1;
 }
 
-const MOVE_META: Record<Face, MoveMeta> = {
+const MOVE_META: Record<MoveTarget, MoveMeta> = {
   U: { axis: 'y', layer: 1, clockwiseQuarter: -1 },
   D: { axis: 'y', layer: -1, clockwiseQuarter: 1 },
   R: { axis: 'x', layer: 1, clockwiseQuarter: -1 },
   L: { axis: 'x', layer: -1, clockwiseQuarter: 1 },
   F: { axis: 'z', layer: 1, clockwiseQuarter: -1 },
   B: { axis: 'z', layer: -1, clockwiseQuarter: 1 },
+  M: { axis: 'x', layer: 0, clockwiseQuarter: 1 },
+  E: { axis: 'y', layer: 0, clockwiseQuarter: 1 },
+  S: { axis: 'z', layer: 0, clockwiseQuarter: -1 },
 };
 
 const axisIndex: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
+
+export interface MoveRotation {
+  axis: Axis;
+  layer: -1 | 0 | 1;
+  quarter: 1 | -1;
+}
+
+export function getMoveRotation(move: Move): MoveRotation {
+  const meta = MOVE_META[move.face];
+  return {
+    axis: meta.axis,
+    layer: meta.layer,
+    quarter: (meta.clockwiseQuarter * move.direction) as 1 | -1,
+  };
+}
 
 export function createSolvedCube(): Cubie[] {
   const cubies: Cubie[] = [];
@@ -118,13 +140,12 @@ export function multiplyMat3(a: Mat3, b: Mat3): Mat3 {
 }
 
 export function applyMove(cubies: readonly Cubie[], move: Move): Cubie[] {
-  const meta = MOVE_META[move.face];
-  const quarter = (meta.clockwiseQuarter * move.direction) as 1 | -1;
-  const rotation = rotationMatrix(meta.axis, quarter);
-  const index = axisIndex[meta.axis];
+  const { axis, layer, quarter } = getMoveRotation(move);
+  const rotation = rotationMatrix(axis, quarter);
+  const index = axisIndex[axis];
 
   return cubies.map((cubie) => {
-    if (cubie.position[index] !== meta.layer) return cubie;
+    if (cubie.position[index] !== layer) return cubie;
 
     return {
       ...cubie,
@@ -182,8 +203,9 @@ export function homeStickerNormals(cubie: Cubie): Vec3[] {
 
 export function parseMove(input: string): Move | null {
   const normalized = input.trim().toUpperCase();
-  const face = normalized[0] as Face | undefined;
-  if (!face || !FACE_ORDER.includes(face)) return null;
+  const face = normalized[0] as MoveTarget | undefined;
+  const valid = face && MOVE_ORDER.includes(face);
+  if (!face || !valid) return null;
   return { face, direction: normalized.endsWith("'") ? -1 : 1 };
 }
 

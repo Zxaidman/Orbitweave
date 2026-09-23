@@ -94,23 +94,87 @@ button { -webkit-tap-highlight-color: transparent; }
 .cube-canvas { width: 100%; height: 570px; touch-action: none; }
 .cube-canvas canvas { display: block; }
 
-.graph-shell { height: 570px; display: grid; place-items: center; padding-top: 34px; position: relative; }
-.orbit-graph { width: min(94%, 510px); height: min(94%, 510px); touch-action: none; user-select: none; overflow: visible; }
-.graph-rings circle { fill: none; stroke: rgba(125, 154, 184, .24); stroke-width: 1.1; stroke-dasharray: 2 5; }
-.graph-rings .outer-ring { stroke: rgba(125,211,252,.19); stroke-dasharray: none; }
-.graph-edges line { stroke: rgba(139, 165, 192, .28); stroke-width: 1.1; transition: all .21s cubic-bezier(.2,.75,.25,1); }
-.node { cursor: grab; stroke: rgba(255,255,255,.58); stroke-width: 1.4; transition: cx .21s cubic-bezier(.2,.75,.25,1), cy .21s cubic-bezier(.2,.75,.25,1), r .15s ease, stroke-width .15s ease; filter: drop-shadow(0 0 4px rgba(255,255,255,.08)); }
-.node:active { cursor: grabbing; }
-.node.selected { stroke: #fff; stroke-width: 3; filter: url(#glow); }
-.face-handle { cursor: grab; user-select: none; }
-.face-handle:active { cursor: grabbing; }
-.face-handle circle { stroke: rgba(255,255,255,.38); stroke-width: 1.3; filter: drop-shadow(0 3px 7px rgba(0,0,0,.35)); }
-.face-handle text { font-size: 10px; font-weight: 850; fill: #07101d; pointer-events: none; }
-.graph-instructions { position: absolute; left: 22px; right: 22px; bottom: 15px; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); text-align: center; }
-.graph-instructions > span { font-size: .7rem; text-transform: uppercase; letter-spacing: .1em; }
-.graph-instructions small { font-size: .7rem; }
-.selected-face-actions { display: flex; gap: 5px; }
-.selected-face-actions button { padding: 5px 8px; font-size: .73rem; border-radius: 7px; }
+.graph-shell {
+  height: 570px;
+  display: grid;
+  place-items: center;
+  padding-top: 32px;
+  position: relative;
+}
+.orbit-graph {
+  width: min(96%, 620px);
+  height: min(92%, 520px);
+  touch-action: none;
+  user-select: none;
+  overflow: visible;
+}
+.orbit-track-visible {
+  fill: none;
+  stroke: rgba(151, 177, 204, .34);
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+.orbit-track.middle .orbit-track-visible {
+  stroke: rgba(125, 154, 184, .19);
+  stroke-dasharray: 3 5;
+}
+.orbit-track.interactive .orbit-track-visible {
+  stroke: rgba(167, 196, 224, .44);
+}
+.orbit-track-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 18;
+  cursor: grab;
+  pointer-events: stroke;
+}
+.orbit-track-hit:active { cursor: grabbing; }
+.orbit-sticker {
+  stroke: rgba(7, 16, 29, .96);
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+  transition: cx .18s cubic-bezier(.2,.75,.25,1), cy .18s cubic-bezier(.2,.75,.25,1), transform .14s ease;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.28));
+}
+.orbit-sticker.interactive {
+  cursor: grab;
+  stroke: rgba(232, 240, 248, .82);
+}
+.orbit-sticker.interactive:hover {
+  filter: url(#orbit-node-glow);
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(1.12);
+}
+.orbit-sticker.interactive:active { cursor: grabbing; }
+.orbit-track-labels circle {
+  fill: #dbe8f4;
+  stroke: rgba(255,255,255,.6);
+  stroke-width: 1.2;
+}
+.orbit-track-labels text {
+  fill: #07101d;
+  font-size: 8px;
+  font-weight: 850;
+}
+.graph-instructions {
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 12px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+.graph-instructions small {
+  max-width: 590px;
+  font-size: .69rem;
+  line-height: 1.45;
+}
 
 .control-deck { margin-top: 16px; display: grid; grid-template-columns: minmax(220px,.85fr) minmax(480px,1.8fr) minmax(220px,.85fr); gap: 12px; }
 .control-deck > div { min-height: 94px; border: 1px solid var(--line); border-radius: 16px; background: rgba(11,24,40,.72); padding: 14px 16px; }

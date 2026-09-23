@@ -61,9 +61,10 @@ npm run preview
 
 ### Orbit graph
 
-- Drag a colored face handle around the outer orbit to perform that face turn.
-- Select a piece node to reveal the legal cube faces containing that piece.
-- Tangentially swipe a selected node for its primary legal graph action.
+- The structural view is arranged as three offset-circle groups: X, Y, and Z slice families.
+- Each group contains three circles; each circle contains four groups of three sticker faces.
+- Drag a colored sticker or the line of any labeled circle to perform that legal slice turn.
+- U/D/L/R/F/B control outer faces; E/M/S control the three middle slices.
 
 ### Keyboard
 
@@ -72,14 +73,14 @@ npm run preview
 - `Ctrl/Cmd + Z`: undo.
 - `Ctrl/Cmd + Shift + Z`: redo.
 
-## Puzzle rules in v0.1.0
+## Puzzle rules in v0.1.3
 
-- The cube is mechanically constrained to legal 3×3 face turns.
-- The graph contains the 20 movable physical pieces: 8 corners + 12 edges.
-- Graph edges represent current corner↔edge adjacency on the cube surface.
-- Each graph node carries 2–3 colored orientation pips, so piece orientation changes are visible as well as permutation changes.
-- Top, middle, and bottom piece layers are projected onto three concentric graph tracks.
-- Cube and graph never maintain separate authoritative state; both render from one canonical puzzle model.
+- The cube is mechanically constrained to legal 3×3 outer-face turns.
+- The graph and cube render from the same canonical puzzle state.
+- The graph uses nine slice circles arranged as three offset groups, one group for each cube axis.
+- Every slice circle carries the 12 side-strip stickers affected by rotating that slice: four groups of three.
+- All nine graph circles are interactive and produce the corresponding legal cube slice move.
+- U/D/L/R/F/B turn outer faces; E/M/S turn the middle slices.
 - A puzzle is solved only when all movable pieces return to solved position and orientation.
 
 ## Deployment to Vercel

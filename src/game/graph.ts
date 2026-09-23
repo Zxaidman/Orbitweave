@@ -1,76 +1,136 @@
-import type { Cubie, Face, Vec3 } from './cube';
-import { isMovablePiece } from './cube';
+import {
+  FACE_COLORS,
+  faceForNormal,
+  homeStickerNormals,
+  transformVec,
+  type Axis,
+  type Cubie,
+  type Face,
+  type MoveTarget,
+  type Vec3,
+} from './cube';
 
-export interface GraphNode {
+export type OrbitTrackId = Face | 'M' | 'E' | 'S';
+
+export interface OrbitSticker {
   id: string;
-  x: number;
-  y: number;
-  radius: number;
-  angle: number;
-  cubie: Cubie;
+  cubieId: string;
+  homeFace: Face;
+  currentFace: Face;
+  color: string;
 }
 
-export interface GraphEdge {
-  from: string;
-  to: string;
+export interface OrbitStickerGroup {
+  face: Face;
+  stickers: OrbitSticker[];
 }
 
-const RING_RADIUS = {
-  top: 74,
-  middle: 112,
-  bottom: 150,
-} as const;
-
-export function graphNodes(cubies: readonly Cubie[]): GraphNode[] {
-  return cubies.filter(isMovablePiece).map((cubie) => {
-    const [x, y, z] = cubie.position;
-    const radius = y === 1 ? RING_RADIUS.top : y === -1 ? RING_RADIUS.bottom : RING_RADIUS.middle;
-    const angle = Math.atan2(z, x);
-
-    return {
-      id: cubie.id,
-      x: Math.cos(angle) * radius,
-      y: Math.sin(angle) * radius,
-      radius,
-      angle,
-      cubie,
-    };
-  });
+export interface OrbitTrack {
+  id: OrbitTrackId;
+  axis: Axis;
+  layer: -1 | 0 | 1;
+  move: MoveTarget;
+  interactive: boolean;
+  groups: OrbitStickerGroup[];
 }
 
-export function graphEdges(cubies: readonly Cubie[]): GraphEdge[] {
-  const movable = cubies.filter(isMovablePiece);
-  const edges: GraphEdge[] = [];
+interface TrackDefinition {
+  id: OrbitTrackId;
+  axis: Axis;
+  layer: -1 | 0 | 1;
+  move: MoveTarget;
+}
 
-  for (let a = 0; a < movable.length; a += 1) {
-    for (let b = a + 1; b < movable.length; b += 1) {
-      const left = movable[a];
-      const right = movable[b];
-      if (!left || !right) continue;
-      if (distanceSquared(left.position, right.position) === 1) {
-        edges.push({ from: left.id, to: right.id });
-      }
+export const ORBIT_TRACK_DEFINITIONS: readonly TrackDefinition[] = [
+  { id: 'U', axis: 'y', layer: 1, move: 'U' },
+  { id: 'E', axis: 'y', layer: 0, move: 'E' },
+  { id: 'D', axis: 'y', layer: -1, move: 'D' },
+  { id: 'L', axis: 'x', layer: -1, move: 'L' },
+  { id: 'M', axis: 'x', layer: 0, move: 'M' },
+  { id: 'R', axis: 'x', layer: 1, move: 'R' },
+  { id: 'B', axis: 'z', layer: -1, move: 'B' },
+  { id: 'S', axis: 'z', layer: 0, move: 'S' },
+  { id: 'F', axis: 'z', layer: 1, move: 'F' },
+] as const;
+
+const AXIS_INDEX: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
+
+const SIDE_FACE_CYCLES: Record<Axis, readonly Face[]> = {
+  x: ['U', 'F', 'D', 'B'],
+  y: ['F', 'R', 'B', 'L'],
+  z: ['U', 'R', 'D', 'L'],
+};
+
+function sortValue(axis: Axis, currentFace: Face, position: Vec3): number {
+  const [x, y, z] = position;
+
+  if (axis === 'y') {
+    return currentFace === 'F' || currentFace === 'B' ? x : z;
+  }
+
+  if (axis === 'x') {
+    return currentFace === 'U' || currentFace === 'D' ? z : y;
+  }
+
+  return currentFace === 'U' || currentFace === 'D' ? x : y;
+}
+
+function buildTrack(cubies: readonly Cubie[], definition: TrackDefinition): OrbitTrack {
+  const axisIndex = AXIS_INDEX[definition.axis];
+  const grouped = new Map<Face, Array<{ sticker: OrbitSticker; sort: number }>>();
+
+  for (const face of SIDE_FACE_CYCLES[definition.axis]) grouped.set(face, []);
+
+  for (const cubie of cubies) {
+    if (cubie.position[axisIndex] !== definition.layer) continue;
+
+    for (const homeNormal of homeStickerNormals(cubie)) {
+      const currentNormal = transformVec(cubie.orientation, homeNormal);
+
+      // Each slice circle displays the four side strips that travel around its
+      // rotation axis: 4 groups × 3 stickers. Stickers parallel to the axis
+      // belong to the slice's face plane, not to these traveling strips.
+      if (currentNormal[axisIndex] !== 0) continue;
+
+      const currentFace = faceForNormal(currentNormal);
+      const homeFace = faceForNormal(homeNormal);
+      const bucket = grouped.get(currentFace);
+      if (!bucket) continue;
+
+      bucket.push({
+        sticker: {
+          id: `${definition.id}:${cubie.id}:${homeNormal.join(',')}`,
+          cubieId: cubie.id,
+          homeFace,
+          currentFace,
+          color: FACE_COLORS[homeFace],
+        },
+        sort: sortValue(definition.axis, currentFace, cubie.position),
+      });
     }
   }
 
-  return edges;
+  const groups = SIDE_FACE_CYCLES[definition.axis].map((face) => ({
+    face,
+    stickers: (grouped.get(face) ?? [])
+      .sort((left, right) => left.sort - right.sort)
+      .map((entry) => entry.sticker),
+  }));
+
+  return {
+    id: definition.id,
+    axis: definition.axis,
+    layer: definition.layer,
+    move: definition.move,
+    interactive: true,
+    groups,
+  };
 }
 
-export function incidentFaces(position: Vec3): Face[] {
-  const [x, y, z] = position;
-  const faces: Face[] = [];
-  if (y === 1) faces.push('U');
-  if (y === -1) faces.push('D');
-  if (x === 1) faces.push('R');
-  if (x === -1) faces.push('L');
-  if (z === 1) faces.push('F');
-  if (z === -1) faces.push('B');
-  return faces;
+export function buildOrbitTracks(cubies: readonly Cubie[]): OrbitTrack[] {
+  return ORBIT_TRACK_DEFINITIONS.map((definition) => buildTrack(cubies, definition));
 }
 
-export function distanceSquared(a: Vec3, b: Vec3): number {
-  const dx = a[0] - b[0];
-  const dy = a[1] - b[1];
-  const dz = a[2] - b[2];
-  return dx * dx + dy * dy + dz * dz;
+export function orbitTrackStickerCount(track: OrbitTrack): number {
+  return track.groups.reduce((total, group) => total + group.stickers.length, 0);
 }

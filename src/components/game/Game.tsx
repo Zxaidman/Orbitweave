@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { CubeScene } from '@/components/cube/CubeScene';
 import { OrbitGraph } from '@/components/graph/OrbitGraph';
-import { FACE_COLORS, FACE_ORDER, type Face, type MoveDirection } from '@/game/cube';
+import { FACE_COLORS, FACE_ORDER, MOVE_ORDER, type MoveDirection, type MoveTarget } from '@/game/cube';
 import { useGameStore, useScrambleNotation, useSolved } from '@/store/gameStore';
 
 function FaceControls() {
@@ -77,10 +77,10 @@ function KeyboardController() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
       const key = event.key.toUpperCase();
-      if ((FACE_ORDER as readonly string[]).includes(key)) {
+      if ((MOVE_ORDER as readonly string[]).includes(key)) {
         event.preventDefault();
         const direction: MoveDirection = event.shiftKey ? -1 : 1;
-        applyMove({ face: key as Face, direction });
+        applyMove({ face: key as MoveTarget, direction });
         return;
       }
 
@@ -113,7 +113,7 @@ export function Game() {
               <span className="eyebrow">Physical view</span>
               <h2>3×3 Cube</h2>
             </div>
-            <span className="hint">Drag a sticker to turn · right-drag to inspect</span>
+            <span className="hint">Drag a sticker to turn · right-drag or Orbit view to inspect</span>
           </div>
           <CubeScene />
         </article>
@@ -124,7 +124,7 @@ export function Game() {
               <span className="eyebrow">Structural view</span>
               <h2>Orbit Graph</h2>
             </div>
-            <span className="hint">Every graph turn is the same legal cube move</span>
+            <span className="hint">3 groups × 3 slice circles · graph turns mirror cube turns</span>
           </div>
           <OrbitGraph />
         </article>
@@ -138,8 +138,8 @@ export function Game() {
         <FaceControls />
         <div className="keyboard-card">
           <span className="eyebrow">Keyboard</span>
-          <p><kbd>U</kbd> <kbd>R</kbd> <kbd>F</kbd> <kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd></p>
-          <small>Hold <kbd>Shift</kbd> for inverse turns.</small>
+          <p><kbd>U</kbd> <kbd>R</kbd> <kbd>F</kbd> <kbd>D</kbd> <kbd>L</kbd> <kbd>B</kbd> <kbd>M</kbd> <kbd>E</kbd> <kbd>S</kbd></p>
+          <small>Outer faces + middle slices · hold <kbd>Shift</kbd> for inverse turns.</small>
         </div>
       </section>
 

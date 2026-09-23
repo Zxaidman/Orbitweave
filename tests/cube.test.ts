@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FACE_ORDER,
+  SLICE_ORDER,
   applyMove,
   createScramble,
   createSolvedCube,
@@ -10,7 +11,10 @@ import {
   sameVec,
   type Move,
 } from '../src/game/cube';
-import { graphEdges, graphNodes } from '../src/game/graph';
+import {
+  buildOrbitTracks,
+  orbitTrackStickerCount,
+} from '../src/game/graph';
 
 describe('cube engine', () => {
   it('starts solved', () => {
@@ -55,13 +59,58 @@ describe('cube engine', () => {
 });
 
 describe('orbit graph', () => {
-  it('contains exactly the 20 movable corner and edge pieces', () => {
-    const nodes = graphNodes(createSolvedCube());
-    expect(nodes).toHaveLength(20);
+  it('builds three axis groups with three slice circles each', () => {
+    const tracks = buildOrbitTracks(createSolvedCube());
+
+    expect(tracks).toHaveLength(9);
+    expect(tracks.filter((track) => track.axis === 'x')).toHaveLength(3);
+    expect(tracks.filter((track) => track.axis === 'y')).toHaveLength(3);
+    expect(tracks.filter((track) => track.axis === 'z')).toHaveLength(3);
   });
 
-  it('links adjacent corner/edge pieces', () => {
-    const edges = graphEdges(createSolvedCube());
-    expect(edges).toHaveLength(24);
+  it('puts four groups of three stickers on every circle', () => {
+    const tracks = buildOrbitTracks(createSolvedCube());
+
+    for (const track of tracks) {
+      expect(track.groups).toHaveLength(4);
+      expect(track.groups.map((group) => group.stickers.length)).toEqual([3, 3, 3, 3]);
+      expect(orbitTrackStickerCount(track)).toBe(12);
+    }
+  });
+
+  it('makes all nine slice circles actionable', () => {
+    const tracks = buildOrbitTracks(createSolvedCube());
+    const interactive = tracks.filter((track) => track.interactive);
+
+    expect(interactive).toHaveLength(9);
+    expect(interactive.map((track) => track.move).sort())
+      .toEqual([...FACE_ORDER, ...SLICE_ORDER].sort());
+  });
+
+  it.each(SLICE_ORDER)('%s repeated four times returns to solved', (slice) => {
+    let state = createSolvedCube();
+    const move: Move = { face: slice, direction: 1 };
+    for (let index = 0; index < 4; index += 1) state = applyMove(state, move);
+    expect(isSolved(state)).toBe(true);
+  });
+
+  it.each(SLICE_ORDER)('%s followed by inverse restores the cube state', (slice) => {
+    const solved = createSolvedCube();
+    const move: Move = { face: slice, direction: 1 };
+    const restored = applyMove(applyMove(solved, move), inverseMove(move));
+
+    for (const cubie of restored) {
+      const original = solved.find((candidate) => candidate.id === cubie.id);
+      expect(original).toBeDefined();
+      expect(sameVec(cubie.position, original!.position)).toBe(true);
+      expect(sameMatrix(cubie.orientation, original!.orientation)).toBe(true);
+    }
+  });
+
+  it('preserves twelve stickers per circle after a legal move', () => {
+    const moved = applyMove(createSolvedCube(), { face: 'R', direction: 1 });
+    const tracks = buildOrbitTracks(moved);
+
+    for (const track of tracks) expect(orbitTrackStickerCount(track)).toBe(12);
   });
 });
