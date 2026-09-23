@@ -6,7 +6,7 @@
 
 - Rebuild the structural view as three offset orbit groups with three slice circles per group.
 - Represent every slice circle as four groups of three sticker faces, matching the reference concept more closely.
-- Keep the six outer face circles interactive while reserving the three middle-slice circles for later advanced moves.
+- Make all nine slice circles interactive: U/D/L/R/F/B plus the M/E/S middle slices.
 - Replace ambiguous cube swipe direction detection with camera-aware projected legal-turn gestures.
 - Commit a face turn as soon as the drag threshold is crossed for more responsive mouse and touch input.
 - Animate legal face turns around the real cube axis instead of linearly sliding cubies between positions.
