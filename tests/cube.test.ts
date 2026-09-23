@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   FACE_ORDER,
+  SLICE_ORDER,
   applyMove,
   createScramble,
   createSolvedCube,
@@ -77,12 +78,33 @@ describe('orbit graph', () => {
     }
   });
 
-  it('keeps only the six outer face circles interactive in v0.1.3', () => {
+  it('makes all nine slice circles actionable', () => {
     const tracks = buildOrbitTracks(createSolvedCube());
     const interactive = tracks.filter((track) => track.interactive);
 
-    expect(interactive).toHaveLength(6);
-    expect(interactive.map((track) => track.face).sort()).toEqual([...FACE_ORDER].sort());
+    expect(interactive).toHaveLength(9);
+    expect(interactive.map((track) => track.move).sort())
+      .toEqual([...FACE_ORDER, ...SLICE_ORDER].sort());
+  });
+
+  it.each(SLICE_ORDER)('%s repeated four times returns to solved', (slice) => {
+    let state = createSolvedCube();
+    const move: Move = { face: slice, direction: 1 };
+    for (let index = 0; index < 4; index += 1) state = applyMove(state, move);
+    expect(isSolved(state)).toBe(true);
+  });
+
+  it.each(SLICE_ORDER)('%s followed by inverse restores the cube state', (slice) => {
+    const solved = createSolvedCube();
+    const move: Move = { face: slice, direction: 1 };
+    const restored = applyMove(applyMove(solved, move), inverseMove(move));
+
+    for (const cubie of restored) {
+      const original = solved.find((candidate) => candidate.id === cubie.id);
+      expect(original).toBeDefined();
+      expect(sameVec(cubie.position, original!.position)).toBe(true);
+      expect(sameMatrix(cubie.orientation, original!.orientation)).toBe(true);
+    }
   });
 
   it('preserves twelve stickers per circle after a legal move', () => {
