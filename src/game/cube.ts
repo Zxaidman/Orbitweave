@@ -54,6 +54,21 @@ const MOVE_META: Record<Face, MoveMeta> = {
 
 const axisIndex: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
 
+export interface MoveRotation {
+  axis: Axis;
+  layer: 1 | -1;
+  quarter: 1 | -1;
+}
+
+export function getMoveRotation(move: Move): MoveRotation {
+  const meta = MOVE_META[move.face];
+  return {
+    axis: meta.axis,
+    layer: meta.layer,
+    quarter: (meta.clockwiseQuarter * move.direction) as 1 | -1,
+  };
+}
+
 export function createSolvedCube(): Cubie[] {
   const cubies: Cubie[] = [];
 
@@ -118,13 +133,12 @@ export function multiplyMat3(a: Mat3, b: Mat3): Mat3 {
 }
 
 export function applyMove(cubies: readonly Cubie[], move: Move): Cubie[] {
-  const meta = MOVE_META[move.face];
-  const quarter = (meta.clockwiseQuarter * move.direction) as 1 | -1;
-  const rotation = rotationMatrix(meta.axis, quarter);
-  const index = axisIndex[meta.axis];
+  const { axis, layer, quarter } = getMoveRotation(move);
+  const rotation = rotationMatrix(axis, quarter);
+  const index = axisIndex[axis];
 
   return cubies.map((cubie) => {
-    if (cubie.position[index] !== meta.layer) return cubie;
+    if (cubie.position[index] !== layer) return cubie;
 
     return {
       ...cubie,
