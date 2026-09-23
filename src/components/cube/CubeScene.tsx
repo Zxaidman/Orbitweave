@@ -1,41 +1,52 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { MOUSE, Quaternion, Matrix4, Vector3, TOUCH } from 'three';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Euler, MOUSE, Matrix4, Quaternion, TOUCH, Vector3 } from 'three';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Group } from 'three';
 import {
   FACE_COLORS,
+  applyMove as applyCubeMove,
   faceForNormal,
+  getMoveRotation,
   homeStickerNormals,
   transformVec,
+  type Axis,
   type Cubie,
+  type Face,
   type Mat3,
+  type Move,
   type MoveDirection,
   type Vec3,
 } from '@/game/cube';
 import { useGameStore } from '@/store/gameStore';
 
 const SPACING = 1.04;
-const STICKER_PLANE = SPACING + 0.493;
-const ANIMATION_SECONDS = 0.22;
-const DRAG_THRESHOLD_PX = 14;
+const ANIMATION_SECONDS = 0.2;
+const DRAG_THRESHOLD = 10;
+const CUBE_ROTATION = new Euler(-0.08, 0.18, 0);
+
+const AXIS_INDEX: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
+const AXIS_VECTOR: Record<Axis, Vector3> = {
+  x: new Vector3(1, 0, 0),
+  y: new Vector3(0, 1, 0),
+  z: new Vector3(0, 0, 1),
+};
+
+interface StickerGesture {
+  x: number;
+  y: number;
+  face: Face;
+  clockwiseX: number;
+  clockwiseY: number;
+  committed: boolean;
+}
 
 interface AnimatedCubieProps {
   previous: Cubie;
   current: Cubie;
   animationKey: number;
+  lastMove: Move | null;
   orbitMode: boolean;
-  onGestureActiveChange: (active: boolean) => void;
-}
-
-interface StickerGesture {
-  pointerId: number;
-  x: number;
-  y: number;
-  face: ReturnType<typeof faceForNormal>;
-  hitPoint: Vector3;
-  outwardNormal: Vector3;
-  committed: boolean;
 }
 
 function mat3ToQuaternion(matrix: Mat3): Quaternion {
@@ -56,62 +67,29 @@ function localStickerQuaternion(normal: Vec3): Quaternion {
   );
 }
 
-function turnDirectionForDrag(
-  gesture: StickerGesture,
-  clientX: number,
-  clientY: number,
-  cameraQuaternion: Quaternion,
-): MoveDirection | null {
-  const dx = clientX - gesture.x;
-  const dy = clientY - gesture.y;
-  if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return null;
+function referencePosition(face: Face, position: Vec3): Vec3 {
+  const [x, y, z] = position;
 
-  const cameraRight = new Vector3(1, 0, 0).applyQuaternion(cameraQuaternion);
-  const cameraUp = new Vector3(0, 1, 0).applyQuaternion(cameraQuaternion);
-  const dragWorld = cameraRight
-    .clone()
-    .multiplyScalar(dx)
-    .add(cameraUp.clone().multiplyScalar(-dy));
+  if ((face === 'U' || face === 'D') && x === 0 && z === 0) return [1, y, 0];
+  if ((face === 'R' || face === 'L') && y === 0 && z === 0) return [x, 1, 0];
+  if ((face === 'F' || face === 'B') && x === 0 && y === 0) return [1, 0, z];
 
-  if (dragWorld.lengthSq() < 0.0001) return null;
-  dragWorld.normalize();
-
-  const faceCenter = gesture.outwardNormal.clone().multiplyScalar(STICKER_PLANE);
-  const radial = gesture.hitPoint.clone().sub(faceCenter);
-  radial.addScaledVector(gesture.outwardNormal, -radial.dot(gesture.outwardNormal));
-
-  if (radial.lengthSq() < 0.015) {
-    radial.copy(cameraRight);
-    radial.addScaledVector(gesture.outwardNormal, -radial.dot(gesture.outwardNormal));
-    if (radial.lengthSq() < 0.015) {
-      radial.copy(cameraUp);
-      radial.addScaledVector(gesture.outwardNormal, -radial.dot(gesture.outwardNormal));
-    }
-  }
-
-  if (radial.lengthSq() < 0.0001) return null;
-  radial.normalize();
-
-  const positiveTangent = new Vector3()
-    .crossVectors(gesture.outwardNormal, radial)
-    .normalize();
-  const tangentDot = dragWorld.dot(positiveTangent);
-
-  return tangentDot < 0 ? 1 : -1;
+  return position;
 }
 
 function AnimatedCubie({
   previous,
   current,
   animationKey,
+  lastMove,
   orbitMode,
-  onGestureActiveChange,
 }: AnimatedCubieProps) {
   const groupRef = useRef<Group>(null);
   const startedAt = useRef(0);
   const pointerStart = useRef<StickerGesture | null>(null);
   const applyMove = useGameStore((state) => state.applyMove);
   const camera = useThree((state) => state.camera);
+  const size = useThree((state) => state.size);
 
   const previousQuaternion = useMemo(
     () => mat3ToQuaternion(previous.orientation),
@@ -135,6 +113,24 @@ function AnimatedCubie({
     const raw = Math.min(1, Math.max(0, elapsed / ANIMATION_SECONDS));
     const t = 1 - Math.pow(1 - raw, 3);
 
+    if (lastMove) {
+      const rotation = getMoveRotation(lastMove);
+      const index = AXIS_INDEX[rotation.axis];
+
+      if (previous.position[index] === rotation.layer) {
+        const axis = AXIS_VECTOR[rotation.axis];
+        const angle = rotation.quarter * (Math.PI / 2) * t;
+        const turnQuaternion = new Quaternion().setFromAxisAngle(axis, angle);
+
+        group.position
+          .set(previous.position[0], previous.position[1], previous.position[2])
+          .applyAxisAngle(axis, angle)
+          .multiplyScalar(SPACING);
+        group.quaternion.copy(turnQuaternion).multiply(previousQuaternion);
+        return;
+      }
+    }
+
     group.position.set(
       (previous.position[0] + (current.position[0] - previous.position[0]) * t) * SPACING,
       (previous.position[1] + (current.position[1] - previous.position[1]) * t) * SPACING,
@@ -143,64 +139,71 @@ function AnimatedCubie({
     group.quaternion.copy(previousQuaternion).slerp(currentQuaternion, t);
   });
 
-  const clearGesture = () => {
-    pointerStart.current = null;
-    onGestureActiveChange(false);
-  };
+  const clockwiseScreenVector = (face: Face): { x: number; y: number } => {
+    const probePosition = referencePosition(face, current.position);
+    const probe: Cubie = { ...current, position: probePosition };
+    const turned = applyCubeMove([probe], { face, direction: 1 })[0] ?? probe;
 
-  const commitStickerDrag = (event: any) => {
-    const gesture = pointerStart.current;
-    if (!gesture || gesture.committed || orbitMode || event.pointerId !== gesture.pointerId) return;
+    const before = new Vector3(...probePosition)
+      .multiplyScalar(SPACING)
+      .applyEuler(CUBE_ROTATION)
+      .project(camera);
+    const after = new Vector3(...turned.position)
+      .multiplyScalar(SPACING)
+      .applyEuler(CUBE_ROTATION)
+      .project(camera);
 
-    const direction = turnDirectionForDrag(
-      gesture,
-      event.clientX,
-      event.clientY,
-      camera.quaternion,
-    );
-    if (!direction) return;
+    const beforeX = (before.x + 1) * size.width * 0.5;
+    const beforeY = (1 - before.y) * size.height * 0.5;
+    const afterX = (after.x + 1) * size.width * 0.5;
+    const afterY = (1 - after.y) * size.height * 0.5;
+    const dx = afterX - beforeX;
+    const dy = afterY - beforeY;
+    const length = Math.hypot(dx, dy) || 1;
 
-    gesture.committed = true;
-    applyMove({ face: gesture.face, direction });
+    return { x: dx / length, y: dy / length };
   };
 
   const startStickerDrag = (event: any, homeNormal: Vec3) => {
     if (orbitMode || event.button === 2) return;
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
 
-    event.preventDefault();
     event.stopPropagation();
-
-    const logicalNormal = transformVec(current.orientation, homeNormal);
-    const objectQuaternion = new Quaternion();
-    event.object.getWorldQuaternion(objectQuaternion);
-    const outwardNormal = new Vector3(0, 0, 1)
-      .applyQuaternion(objectQuaternion)
-      .normalize();
+    const worldNormal = transformVec(current.orientation, homeNormal);
+    const face = faceForNormal(worldNormal);
+    const clockwise = clockwiseScreenVector(face);
 
     pointerStart.current = {
-      pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      face: faceForNormal(logicalNormal),
-      hitPoint: event.point.clone(),
-      outwardNormal,
+      face,
+      clockwiseX: clockwise.x,
+      clockwiseY: clockwise.y,
       committed: false,
     };
 
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-    onGestureActiveChange(true);
+    event.target.setPointerCapture?.(event.pointerId);
+  };
+
+  const updateStickerDrag = (event: any) => {
+    const start = pointerStart.current;
+    if (!start || start.committed || orbitMode) return;
+
+    event.stopPropagation();
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+
+    const dot = dx * start.clockwiseX + dy * start.clockwiseY;
+    const direction: MoveDirection = dot >= 0 ? 1 : -1;
+    start.committed = true;
+    applyMove({ face: start.face, direction });
   };
 
   const finishStickerDrag = (event: any) => {
-    const gesture = pointerStart.current;
-    if (!gesture || event.pointerId !== gesture.pointerId) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    commitStickerDrag(event);
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    clearGesture();
+    updateStickerDrag(event);
+    pointerStart.current = null;
+    event.target.releasePointerCapture?.(event.pointerId);
   };
 
   return (
@@ -213,15 +216,16 @@ function AnimatedCubie({
       {stickers.map((normal) => {
         const face = faceForNormal(normal);
         const q = localStickerQuaternion(normal);
+
         return (
           <mesh
             key={`${current.id}-${normal.join(',')}`}
             position={[normal[0] * 0.493, normal[1] * 0.493, normal[2] * 0.493]}
             quaternion={q}
             onPointerDown={(event) => startStickerDrag(event, normal)}
-            onPointerMove={commitStickerDrag}
+            onPointerMove={updateStickerDrag}
             onPointerUp={finishStickerDrag}
-            onPointerCancel={clearGesture}
+            onPointerCancel={() => { pointerStart.current = null; }}
           >
             <boxGeometry args={[0.78, 0.78, 0.028]} />
             <meshStandardMaterial color={FACE_COLORS[face]} roughness={0.34} />
@@ -236,8 +240,8 @@ function CubeWorld() {
   const cubies = useGameStore((state) => state.cubies);
   const previousCubies = useGameStore((state) => state.previousCubies);
   const animationKey = useGameStore((state) => state.animationKey);
+  const lastMove = useGameStore((state) => state.lastMove);
   const orbitMode = useGameStore((state) => state.orbitMode);
-  const [gestureActive, setGestureActive] = useState(false);
 
   const previousById = useMemo(
     () => new Map(previousCubies.map((cubie) => [cubie.id, cubie])),
@@ -250,22 +254,21 @@ function CubeWorld() {
       <directionalLight position={[5, 8, 6]} intensity={2.2} castShadow />
       <directionalLight position={[-5, -2, -4]} intensity={0.7} />
 
-      <group rotation={[-0.08, 0.18, 0]}>
+      <group rotation={CUBE_ROTATION}>
         {cubies.map((cubie) => (
           <AnimatedCubie
             key={cubie.id}
             previous={previousById.get(cubie.id) ?? cubie}
             current={cubie}
             animationKey={animationKey}
+            lastMove={lastMove}
             orbitMode={orbitMode}
-            onGestureActiveChange={setGestureActive}
           />
         ))}
       </group>
 
       <OrbitControls
         makeDefault
-        enabled={!gestureActive}
         enablePan={false}
         enableZoom
         enableRotate
