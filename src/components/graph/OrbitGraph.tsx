@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import type { Axis, Face, MoveDirection } from '@/game/cube';
+import type { Axis, MoveDirection, MoveTarget } from '@/game/cube';
 import {
   buildOrbitTracks,
   type OrbitTrack,
@@ -21,7 +21,7 @@ interface TrackLayout {
 }
 
 interface TrackGesture {
-  face: Face;
+  move: MoveTarget;
   startX: number;
   startY: number;
   centerX: number;
@@ -110,8 +110,6 @@ export function OrbitGraph() {
     track: OrbitTrack,
     layout: TrackLayout,
   ) => {
-    if (!track.face) return;
-
     event.preventDefault();
     event.stopPropagation();
 
@@ -120,7 +118,7 @@ export function OrbitGraph() {
 
     const point = clientToSvg(event, svg);
     gesture.current = {
-      face: track.face,
+      move: track.move,
       startX: point.x,
       startY: point.y,
       centerX: layout.cx,
@@ -153,7 +151,7 @@ export function OrbitGraph() {
 
     const direction: MoveDirection = tangentDot >= 0 ? 1 : -1;
     current.committed = true;
-    applyMove({ face: current.face, direction });
+    applyMove({ face: current.move, direction });
   };
 
   const finishTrackDrag = (event: React.PointerEvent<SVGElement>) => {
@@ -186,15 +184,17 @@ export function OrbitGraph() {
             if (!layout) return null;
 
             return (
-              <g key={track.id} className={track.interactive ? 'orbit-track interactive' : 'orbit-track middle'}>
+              <g
+                key={track.id}
+                className={['E', 'M', 'S'].includes(track.id) ? 'orbit-track interactive middle' : 'orbit-track interactive'}
+              >
                 <circle
                   cx={layout.cx}
                   cy={layout.cy}
                   r={TRACK_RADIUS}
                   className="orbit-track-visible"
                 />
-                {track.interactive && (
-                  <circle
+                <circle
                     cx={layout.cx}
                     cy={layout.cy}
                     r={TRACK_RADIUS}
@@ -204,7 +204,6 @@ export function OrbitGraph() {
                     onPointerUp={finishTrackDrag}
                     onPointerCancel={() => { gesture.current = null; }}
                   />
-                )}
               </g>
             );
           })}
@@ -229,19 +228,11 @@ export function OrbitGraph() {
                     cy={point.y}
                     r={NODE_RADIUS}
                     fill={sticker.color}
-                    className={track.interactive ? 'orbit-sticker interactive' : 'orbit-sticker'}
-                    onPointerDown={
-                      track.interactive
-                        ? (event) => beginTrackDrag(event, track, layout)
-                        : undefined
-                    }
-                    onPointerMove={track.interactive ? updateTrackDrag : undefined}
-                    onPointerUp={track.interactive ? finishTrackDrag : undefined}
-                    onPointerCancel={
-                      track.interactive
-                        ? () => { gesture.current = null; }
-                        : undefined
-                    }
+                    className="orbit-sticker interactive"
+                    onPointerDown={(event) => beginTrackDrag(event, track, layout)}
+                    onPointerMove={updateTrackDrag}
+                    onPointerUp={finishTrackDrag}
+                    onPointerCancel={() => { gesture.current = null; }}
                   >
                     <title>{`${track.id} slice · ${group.face} strip · ${sticker.homeFace} sticker`}</title>
                   </circle>
@@ -253,7 +244,6 @@ export function OrbitGraph() {
 
         <g className="orbit-track-labels" pointerEvents="none">
           {tracks.map((track) => {
-            if (!track.face) return null;
             const layout = TRACK_LAYOUTS.get(track.id);
             if (!layout) return null;
             const label = pointOnCircle(layout.cx, layout.cy, TRACK_RADIUS + 18, -90);
@@ -261,7 +251,7 @@ export function OrbitGraph() {
             return (
               <g key={`label-${track.id}`} transform={`translate(${label.x} ${label.y})`}>
                 <circle r="10" />
-                <text textAnchor="middle" dominantBaseline="central">{track.face}</text>
+                <text textAnchor="middle" dominantBaseline="central">{track.move}</text>
               </g>
             );
           })}
@@ -271,7 +261,7 @@ export function OrbitGraph() {
       <div className="graph-instructions">
         <small>
           Three offset-circle groups · each circle carries four groups of three stickers.
-          Drag a sticker or labeled outer slice clockwise/counter-clockwise to make the same legal cube turn.
+          Drag any sticker or labeled slice clockwise/counter-clockwise; all nine circles perform their matching cube slice move.
         </small>
       </div>
     </div>
