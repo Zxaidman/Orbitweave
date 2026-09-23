@@ -2,7 +2,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { MOUSE, Quaternion, Matrix4, Vector3, TOUCH } from 'three';
 import { useEffect, useMemo, useRef } from 'react';
-import type { Group, Mesh } from 'three';
+import type { Group } from 'three';
 import {
   FACE_COLORS,
   faceForNormal,

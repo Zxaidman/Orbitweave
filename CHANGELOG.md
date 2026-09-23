@@ -1,5 +1,16 @@
 # Changelog
 
+
+
+## 0.1.2 - 2026-09-22
+
+### Fixed
+
+- Add `@astrojs/check` required by the `npm run check` validation command.
+- Add and commit `package-lock.json` for reproducible npm and Vercel installs.
+- Remove an unused Three.js `Mesh` type import.
+- Validate the project on Windows with all 16 tests passing, Astro check passing, and the production build completing successfully.
+
 ## 0.1.1 - 2026-09-22
 
 ### Fixed

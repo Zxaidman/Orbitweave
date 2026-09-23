@@ -6,8 +6,7 @@ A cube turn immediately changes the graph. A graph turn performs the same legal 
 
 ## Version
 
-`0.1.1` — Dependency compatibility patch for the Cube + Orbit Graph Prototype
-
+`0.1.2` —  Reproducible build and validation patchDependency compatibility patch for the Cube + Orbit Graph Prototyp
 
 ## v0.1.1 patch
 
