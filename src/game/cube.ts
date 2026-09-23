@@ -38,6 +38,8 @@ export const FACE_COLORS: Record<Face, string> = {
 };
 
 export const FACE_ORDER: readonly Face[] = ['U', 'R', 'F', 'D', 'L', 'B'];
+export const SLICE_ORDER: readonly Slice[] = ['M', 'E', 'S'];
+export const MOVE_ORDER: readonly MoveTarget[] = [...FACE_ORDER, ...SLICE_ORDER];
 
 interface MoveMeta {
   axis: Axis;
@@ -202,7 +204,7 @@ export function homeStickerNormals(cubie: Cubie): Vec3[] {
 export function parseMove(input: string): Move | null {
   const normalized = input.trim().toUpperCase();
   const face = normalized[0] as MoveTarget | undefined;
-  const valid = face && ([...FACE_ORDER, 'M', 'E', 'S'] as readonly MoveTarget[]).includes(face);
+  const valid = face && MOVE_ORDER.includes(face);
   if (!face || !valid) return null;
   return { face, direction: normalized.endsWith("'") ? -1 : 1 };
 }
