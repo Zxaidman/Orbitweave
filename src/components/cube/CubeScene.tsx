@@ -1,7 +1,7 @@
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { MOUSE, Quaternion, Matrix4, Vector3, TOUCH } from 'three';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Group } from 'three';
 import {
   FACE_COLORS,
@@ -16,13 +16,26 @@ import {
 import { useGameStore } from '@/store/gameStore';
 
 const SPACING = 1.04;
+const STICKER_PLANE = SPACING + 0.493;
 const ANIMATION_SECONDS = 0.22;
+const DRAG_THRESHOLD_PX = 14;
 
 interface AnimatedCubieProps {
   previous: Cubie;
   current: Cubie;
   animationKey: number;
   orbitMode: boolean;
+  onGestureActiveChange: (active: boolean) => void;
+}
+
+interface StickerGesture {
+  pointerId: number;
+  x: number;
+  y: number;
+  face: ReturnType<typeof faceForNormal>;
+  hitPoint: Vector3;
+  outwardNormal: Vector3;
+  committed: boolean;
 }
 
 function mat3ToQuaternion(matrix: Mat3): Quaternion {
@@ -43,11 +56,62 @@ function localStickerQuaternion(normal: Vec3): Quaternion {
   );
 }
 
-function AnimatedCubie({ previous, current, animationKey, orbitMode }: AnimatedCubieProps) {
+function turnDirectionForDrag(
+  gesture: StickerGesture,
+  clientX: number,
+  clientY: number,
+  cameraQuaternion: Quaternion,
+): MoveDirection | null {
+  const dx = clientX - gesture.x;
+  const dy = clientY - gesture.y;
+  if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return null;
+
+  const cameraRight = new Vector3(1, 0, 0).applyQuaternion(cameraQuaternion);
+  const cameraUp = new Vector3(0, 1, 0).applyQuaternion(cameraQuaternion);
+  const dragWorld = cameraRight
+    .clone()
+    .multiplyScalar(dx)
+    .add(cameraUp.clone().multiplyScalar(-dy));
+
+  if (dragWorld.lengthSq() < 0.0001) return null;
+  dragWorld.normalize();
+
+  const faceCenter = gesture.outwardNormal.clone().multiplyScalar(STICKER_PLANE);
+  const radial = gesture.hitPoint.clone().sub(faceCenter);
+  radial.addScaledVector(gesture.outwardNormal, -radial.dot(gesture.outwardNormal));
+
+  if (radial.lengthSq() < 0.015) {
+    radial.copy(cameraRight);
+    radial.addScaledVector(gesture.outwardNormal, -radial.dot(gesture.outwardNormal));
+    if (radial.lengthSq() < 0.015) {
+      radial.copy(cameraUp);
+      radial.addScaledVector(gesture.outwardNormal, -radial.dot(gesture.outwardNormal));
+    }
+  }
+
+  if (radial.lengthSq() < 0.0001) return null;
+  radial.normalize();
+
+  const positiveTangent = new Vector3()
+    .crossVectors(gesture.outwardNormal, radial)
+    .normalize();
+  const tangentDot = dragWorld.dot(positiveTangent);
+
+  return tangentDot < 0 ? 1 : -1;
+}
+
+function AnimatedCubie({
+  previous,
+  current,
+  animationKey,
+  orbitMode,
+  onGestureActiveChange,
+}: AnimatedCubieProps) {
   const groupRef = useRef<Group>(null);
   const startedAt = useRef(0);
-  const pointerStart = useRef<{ x: number; y: number; face: ReturnType<typeof faceForNormal> } | null>(null);
+  const pointerStart = useRef<StickerGesture | null>(null);
   const applyMove = useGameStore((state) => state.applyMove);
+  const camera = useThree((state) => state.camera);
 
   const previousQuaternion = useMemo(
     () => mat3ToQuaternion(previous.orientation),
@@ -79,33 +143,64 @@ function AnimatedCubie({ previous, current, animationKey, orbitMode }: AnimatedC
     group.quaternion.copy(previousQuaternion).slerp(currentQuaternion, t);
   });
 
+  const clearGesture = () => {
+    pointerStart.current = null;
+    onGestureActiveChange(false);
+  };
+
+  const commitStickerDrag = (event: any) => {
+    const gesture = pointerStart.current;
+    if (!gesture || gesture.committed || orbitMode || event.pointerId !== gesture.pointerId) return;
+
+    const direction = turnDirectionForDrag(
+      gesture,
+      event.clientX,
+      event.clientY,
+      camera.quaternion,
+    );
+    if (!direction) return;
+
+    gesture.committed = true;
+    applyMove({ face: gesture.face, direction });
+  };
+
   const startStickerDrag = (event: any, homeNormal: Vec3) => {
     if (orbitMode || event.button === 2) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+    event.preventDefault();
     event.stopPropagation();
-    const worldNormal = transformVec(current.orientation, homeNormal);
+
+    const logicalNormal = transformVec(current.orientation, homeNormal);
+    const objectQuaternion = new Quaternion();
+    event.object.getWorldQuaternion(objectQuaternion);
+    const outwardNormal = new Vector3(0, 0, 1)
+      .applyQuaternion(objectQuaternion)
+      .normalize();
+
     pointerStart.current = {
+      pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      face: faceForNormal(worldNormal),
+      face: faceForNormal(logicalNormal),
+      hitPoint: event.point.clone(),
+      outwardNormal,
+      committed: false,
     };
+
     event.currentTarget.setPointerCapture?.(event.pointerId);
+    onGestureActiveChange(true);
   };
 
   const finishStickerDrag = (event: any) => {
-    const start = pointerStart.current;
-    pointerStart.current = null;
-    if (!start || orbitMode || event.button === 2) return;
+    const gesture = pointerStart.current;
+    if (!gesture || event.pointerId !== gesture.pointerId) return;
+
+    event.preventDefault();
     event.stopPropagation();
-
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
-    if (Math.hypot(dx, dy) < 12) return;
-
-    const direction: MoveDirection = Math.abs(dx) >= Math.abs(dy)
-      ? (dx > 0 ? 1 : -1)
-      : (dy < 0 ? 1 : -1);
-
-    applyMove({ face: start.face, direction });
+    commitStickerDrag(event);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    clearGesture();
   };
 
   return (
@@ -124,8 +219,9 @@ function AnimatedCubie({ previous, current, animationKey, orbitMode }: AnimatedC
             position={[normal[0] * 0.493, normal[1] * 0.493, normal[2] * 0.493]}
             quaternion={q}
             onPointerDown={(event) => startStickerDrag(event, normal)}
+            onPointerMove={commitStickerDrag}
             onPointerUp={finishStickerDrag}
-            onPointerCancel={() => { pointerStart.current = null; }}
+            onPointerCancel={clearGesture}
           >
             <boxGeometry args={[0.78, 0.78, 0.028]} />
             <meshStandardMaterial color={FACE_COLORS[face]} roughness={0.34} />
@@ -141,6 +237,7 @@ function CubeWorld() {
   const previousCubies = useGameStore((state) => state.previousCubies);
   const animationKey = useGameStore((state) => state.animationKey);
   const orbitMode = useGameStore((state) => state.orbitMode);
+  const [gestureActive, setGestureActive] = useState(false);
 
   const previousById = useMemo(
     () => new Map(previousCubies.map((cubie) => [cubie.id, cubie])),
@@ -161,13 +258,15 @@ function CubeWorld() {
             current={cubie}
             animationKey={animationKey}
             orbitMode={orbitMode}
+            onGestureActiveChange={setGestureActive}
           />
         ))}
       </group>
 
       <OrbitControls
         makeDefault
-        enablePan={orbitMode}
+        enabled={!gestureActive}
+        enablePan={false}
         enableZoom
         enableRotate
         minDistance={5.4}
