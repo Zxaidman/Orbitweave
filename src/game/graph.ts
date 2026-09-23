@@ -6,6 +6,7 @@ import {
   type Axis,
   type Cubie,
   type Face,
+  type MoveTarget,
   type Vec3,
 } from './cube';
 
@@ -28,7 +29,7 @@ export interface OrbitTrack {
   id: OrbitTrackId;
   axis: Axis;
   layer: -1 | 0 | 1;
-  face: Face | null;
+  move: MoveTarget;
   interactive: boolean;
   groups: OrbitStickerGroup[];
 }
@@ -37,19 +38,19 @@ interface TrackDefinition {
   id: OrbitTrackId;
   axis: Axis;
   layer: -1 | 0 | 1;
-  face: Face | null;
+  move: MoveTarget;
 }
 
 export const ORBIT_TRACK_DEFINITIONS: readonly TrackDefinition[] = [
-  { id: 'U', axis: 'y', layer: 1, face: 'U' },
-  { id: 'E', axis: 'y', layer: 0, face: null },
-  { id: 'D', axis: 'y', layer: -1, face: 'D' },
-  { id: 'L', axis: 'x', layer: -1, face: 'L' },
-  { id: 'M', axis: 'x', layer: 0, face: null },
-  { id: 'R', axis: 'x', layer: 1, face: 'R' },
-  { id: 'B', axis: 'z', layer: -1, face: 'B' },
-  { id: 'S', axis: 'z', layer: 0, face: null },
-  { id: 'F', axis: 'z', layer: 1, face: 'F' },
+  { id: 'U', axis: 'y', layer: 1, move: 'U' },
+  { id: 'E', axis: 'y', layer: 0, move: 'E' },
+  { id: 'D', axis: 'y', layer: -1, move: 'D' },
+  { id: 'L', axis: 'x', layer: -1, move: 'L' },
+  { id: 'M', axis: 'x', layer: 0, move: 'M' },
+  { id: 'R', axis: 'x', layer: 1, move: 'R' },
+  { id: 'B', axis: 'z', layer: -1, move: 'B' },
+  { id: 'S', axis: 'z', layer: 0, move: 'S' },
+  { id: 'F', axis: 'z', layer: 1, move: 'F' },
 ] as const;
 
 const AXIS_INDEX: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
@@ -120,8 +121,8 @@ function buildTrack(cubies: readonly Cubie[], definition: TrackDefinition): Orbi
     id: definition.id,
     axis: definition.axis,
     layer: definition.layer,
-    face: definition.face,
-    interactive: definition.face !== null,
+    move: definition.move,
+    interactive: true,
     groups,
   };
 }
