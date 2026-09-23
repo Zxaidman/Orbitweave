@@ -63,8 +63,8 @@ npm run preview
 
 - The structural view is arranged as three offset-circle groups: X, Y, and Z slice families.
 - Each group contains three circles; each circle contains four groups of three sticker faces.
-- Drag a colored sticker or the line of a labeled outer face circle to perform that legal face turn.
-- The middle E/M/S circles are structural in v0.1.3 and are reserved for later advanced slice-move levels.
+- Drag a colored sticker or the line of any labeled circle to perform that legal slice turn.
+- U/D/L/R/F/B control outer faces; E/M/S control the three middle slices.
 
 ### Keyboard
 
@@ -79,8 +79,8 @@ npm run preview
 - The graph and cube render from the same canonical puzzle state.
 - The graph uses nine slice circles arranged as three offset groups, one group for each cube axis.
 - Every slice circle carries the 12 side-strip stickers affected by rotating that slice: four groups of three.
-- U/D/L/R/F/B graph circles are interactive and produce exactly the same legal cube moves.
-- E/M/S middle-slice circles are visible but not yet interactive.
+- All nine graph circles are interactive and produce the corresponding legal cube slice move.
+- U/D/L/R/F/B turn outer faces; E/M/S turn the middle slices.
 - A puzzle is solved only when all movable pieces return to solved position and orientation.
 
 ## Deployment to Vercel
