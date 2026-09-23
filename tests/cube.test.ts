@@ -10,7 +10,7 @@ import {
   sameVec,
   type Move,
 } from '../src/game/cube';
-import { graphEdges, graphNodes } from '../src/game/graph';
+import { buildOrbitTracks, orbitTrackStickerCount } from '../src/game/graph';
 
 describe('cube engine', () => {
   it('starts solved', () => {
@@ -55,13 +55,41 @@ describe('cube engine', () => {
 });
 
 describe('orbit graph', () => {
-  it('contains exactly the 20 movable corner and edge pieces', () => {
-    const nodes = graphNodes(createSolvedCube());
-    expect(nodes).toHaveLength(20);
+  it('contains three axis groups of three slice tracks', () => {
+    const tracks = buildOrbitTracks(createSolvedCube());
+    expect(tracks).toHaveLength(9);
+    expect(tracks.map((track) => track.id)).toEqual(['U', 'E', 'D', 'L', 'M', 'R', 'B', 'S', 'F']);
   });
 
-  it('links adjacent corner/edge pieces', () => {
-    const edges = graphEdges(createSolvedCube());
-    expect(edges).toHaveLength(24);
+  it('puts four groups of three traveling stickers on every slice circle', () => {
+    const tracks = buildOrbitTracks(createSolvedCube());
+
+    for (const track of tracks) {
+      expect(track.groups).toHaveLength(4);
+      expect(track.groups.map((group) => group.stickers.length)).toEqual([3, 3, 3, 3]);
+      expect(orbitTrackStickerCount(track)).toBe(12);
+    }
+  });
+
+  it('keeps the six face tracks interactive and three middle slice tracks structural', () => {
+    const tracks = buildOrbitTracks(createSolvedCube());
+    expect(tracks.filter((track) => track.interactive).map((track) => track.id)).toEqual([
+      'U', 'D', 'L', 'R', 'B', 'F',
+    ]);
+    expect(tracks.filter((track) => !track.interactive).map((track) => track.id)).toEqual(['E', 'M', 'S']);
+  });
+
+  it('cycles the U orbit sticker groups when the U face turns', () => {
+    const solved = createSolvedCube();
+    const before = buildOrbitTracks(solved).find((track) => track.id === 'U');
+    const after = buildOrbitTracks(applyMove(solved, { face: 'U', direction: 1 }))
+      .find((track) => track.id === 'U');
+
+    expect(before).toBeDefined();
+    expect(after).toBeDefined();
+
+    const beforeColors = before!.groups.map((group) => group.stickers.map((sticker) => sticker.homeFace));
+    const afterColors = after!.groups.map((group) => group.stickers.map((sticker) => sticker.homeFace));
+    expect(afterColors).not.toEqual(beforeColors);
   });
 });
