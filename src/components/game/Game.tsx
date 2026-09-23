@@ -113,7 +113,7 @@ export function Game() {
               <span className="eyebrow">Physical view</span>
               <h2>3×3 Cube</h2>
             </div>
-            <span className="hint">Drag a sticker to turn · right-drag to inspect</span>
+            <span className="hint">Drag a sticker to turn · right-drag or Orbit view to inspect</span>
           </div>
           <CubeScene />
         </article>
@@ -124,7 +124,7 @@ export function Game() {
               <span className="eyebrow">Structural view</span>
               <h2>Orbit Graph</h2>
             </div>
-            <span className="hint">Every graph turn is the same legal cube move</span>
+            <span className="hint">3 groups × 3 slice circles · graph turns mirror cube turns</span>
           </div>
           <OrbitGraph />
         </article>
