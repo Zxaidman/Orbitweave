@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { FACE_COLORS, type Axis, type Face, type MoveDirection } from '@/game/cube';
+import { FACE_COLORS, type Axis, type Face, type MoveDirection, type MoveTarget } from '@/game/cube';
 import { buildOrbitTracks, type OrbitTrack, type OrbitTrackId } from '@/game/graph';
 import { useGameStore } from '@/store/gameStore';
 
@@ -35,13 +35,16 @@ const GROUP_LAYOUTS: readonly GroupLayout[] = [
 const GROUP_NODE_ANGLES = [-90, 0, 90, 180] as const;
 const NODE_SPREAD = [-8, 0, 8] as const;
 
-const FACE_LABEL_ANGLES: Record<Face, number> = {
+const TRACK_LABEL_ANGLES: Record<MoveTarget, number> = {
   U: -132,
   D: -48,
   L: 148,
   R: 32,
   B: 212,
   F: -32,
+  M: -90,
+  E: -90,
+  S: -90,
 };
 
 function polarPoint(center: Point, radius: number, angleDegrees: number): Point {
@@ -77,7 +80,7 @@ const TRACK_LAYOUTS = createTrackLayouts();
 
 interface DragState {
   trackId: OrbitTrackId;
-  face: Face;
+  move: MoveTarget;
   centerClientX: number;
   centerClientY: number;
   startAngle: number;
@@ -124,7 +127,7 @@ export function OrbitGraph() {
     if (Math.abs(delta) < threshold) return;
 
     const direction: MoveDirection = delta > 0 ? 1 : -1;
-    applyMove({ face: state.face, direction });
+    applyMove({ face: state.move, direction });
     state.committed = true;
   };
 
@@ -133,7 +136,6 @@ export function OrbitGraph() {
     track: OrbitTrack,
     layout: TrackLayout,
   ) => {
-    if (!track.face) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -144,7 +146,7 @@ export function OrbitGraph() {
 
     drag.current = {
       trackId: track.id,
-      face: track.face,
+      move: track.move,
       centerClientX: center.x,
       centerClientY: center.y,
       startAngle: Math.atan2(event.clientY - center.y, event.clientX - center.x),
@@ -224,33 +226,26 @@ export function OrbitGraph() {
                   });
                 })}
 
-                {track.face ? (() => {
-                  const labelPoint = polarPoint(layout, layout.radius, FACE_LABEL_ANGLES[track.face]);
+                {(() => {
+                  const labelPoint = polarPoint(layout, layout.radius, TRACK_LABEL_ANGLES[track.move]);
+                  const isFace = (['U', 'D', 'L', 'R', 'F', 'B'] as readonly string[]).includes(track.move);
+                  const fill = isFace ? FACE_COLORS[track.move as Face] : '#94a3b8';
                   return (
                     <g className="orbit-face-label" pointerEvents="none">
-                      <circle cx={labelPoint.x} cy={labelPoint.y} r="11" fill={FACE_COLORS[track.face]} />
+                      <circle cx={labelPoint.x} cy={labelPoint.y} r="11" fill={fill} />
                       <text
                         x={labelPoint.x}
                         y={labelPoint.y}
                         textAnchor="middle"
                         dominantBaseline="central"
                       >
-                        {track.face}
+                        {track.move}
                       </text>
                     </g>
                   );
-                })() : (
-                  <text
-                    className="orbit-slice-label"
-                    x={layout.x}
-                    y={layout.y - layout.radius + 15}
-                    textAnchor="middle"
-                  >
-                    {track.id}
-                  </text>
-                )}
+                })()}
 
-                {track.face && (
+                {(
                   <circle
                     className="orbit-track-hit"
                     cx={layout.x}
