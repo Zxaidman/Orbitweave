@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.3 - 2026-09-23
+
+### Changed
+
+- Rebuild the structural view as three offset orbit groups with three slice circles per group.
+- Represent every slice circle as four groups of three sticker faces, matching the reference concept more closely.
+- Keep the six outer face circles interactive while reserving the three middle-slice circles for later advanced moves.
+- Replace ambiguous cube swipe direction detection with camera-aware projected legal-turn gestures.
+- Commit a face turn as soon as the drag threshold is crossed for more responsive mouse and touch input.
+- Animate legal face turns around the real cube axis instead of linearly sliding cubies between positions.
+- Keep right-drag and two-finger camera inspection available, with the Orbit view toggle for deliberate left-drag inspection.
+
+# Changelog
+
 
 
 ## 0.1.2 - 2026-09-22
