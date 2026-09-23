@@ -1,74 +1,75 @@
-import { useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
-import { FACE_COLORS, type Axis, type Face, type MoveDirection, type MoveTarget } from '@/game/cube';
-import { buildOrbitTracks, type OrbitTrack, type OrbitTrackId } from '@/game/graph';
+import { useMemo, useRef } from 'react';
+import type { Axis, Face, MoveDirection } from '@/game/cube';
+import {
+  buildOrbitTracks,
+  type OrbitTrack,
+  type OrbitTrackId,
+} from '@/game/graph';
 import { useGameStore } from '@/store/gameStore';
 
-const VIEW = 520;
-const TRACK_RADIUS = 104;
-const TRACK_OFFSET = 22;
-const DRAG_COMMIT_RADIANS = 0.12;
-const DRAG_RELEASE_RADIANS = 0.07;
+const VIEW_WIDTH = 560;
+const VIEW_HEIGHT = 500;
+const TRACK_RADIUS = 116;
+const NODE_RADIUS = 6.2;
+const DRAG_THRESHOLD = 8;
 
-interface Point {
-  x: number;
-  y: number;
-}
-
-interface GroupLayout {
+interface TrackLayout {
+  id: OrbitTrackId;
   axis: Axis;
-  center: Point;
-  offsetAngle: number;
-  trackIds: readonly OrbitTrackId[];
+  cx: number;
+  cy: number;
 }
 
-interface TrackLayout extends Point {
-  radius: number;
+interface TrackGesture {
+  face: Face;
+  startX: number;
+  startY: number;
+  centerX: number;
+  centerY: number;
+  committed: boolean;
+  pointerId: number;
 }
 
-const GROUP_LAYOUTS: readonly GroupLayout[] = [
-  { axis: 'y', center: { x: 260, y: 158 }, offsetAngle: 0, trackIds: ['U', 'E', 'D'] },
-  { axis: 'x', center: { x: 168, y: 330 }, offsetAngle: -60, trackIds: ['L', 'M', 'R'] },
-  { axis: 'z', center: { x: 352, y: 330 }, offsetAngle: 60, trackIds: ['B', 'S', 'F'] },
-] as const;
+const GROUP_LAYOUTS: ReadonlyArray<{
+  axis: Axis;
+  center: readonly [number, number];
+  offset: readonly [number, number];
+  ids: readonly [OrbitTrackId, OrbitTrackId, OrbitTrackId];
+}> = [
+  {
+    axis: 'y',
+    center: [280, 164],
+    offset: [0, 14],
+    ids: ['U', 'E', 'D'],
+  },
+  {
+    axis: 'x',
+    center: [207, 302],
+    offset: [-12, 7],
+    ids: ['L', 'M', 'R'],
+  },
+  {
+    axis: 'z',
+    center: [353, 302],
+    offset: [12, 7],
+    ids: ['B', 'S', 'F'],
+  },
+];
 
-const GROUP_NODE_ANGLES = [-90, 0, 90, 180] as const;
-const NODE_SPREAD = [-8, 0, 8] as const;
+const GROUP_ANGLES = [-90, 0, 90, 180] as const;
+const STICKER_ANGLE_OFFSETS = [-7.5, 0, 7.5] as const;
 
-const TRACK_LABEL_ANGLES: Record<MoveTarget, number> = {
-  U: -132,
-  D: -48,
-  L: 148,
-  R: 32,
-  B: 212,
-  F: -32,
-  M: -90,
-  E: -90,
-  S: -90,
-};
-
-function polarPoint(center: Point, radius: number, angleDegrees: number): Point {
-  const angle = (angleDegrees * Math.PI) / 180;
-  return {
-    x: center.x + Math.cos(angle) * radius,
-    y: center.y + Math.sin(angle) * radius,
-  };
-}
-
-function createTrackLayouts(): Map<OrbitTrackId, TrackLayout> {
+function createLayouts(): Map<OrbitTrackId, TrackLayout> {
   const layouts = new Map<OrbitTrackId, TrackLayout>();
 
   for (const group of GROUP_LAYOUTS) {
-    const angle = (group.offsetAngle * Math.PI) / 180;
-    const vx = Math.cos(angle) * TRACK_OFFSET;
-    const vy = Math.sin(angle) * TRACK_OFFSET;
-
-    group.trackIds.forEach((id, index) => {
-      const offsetIndex = index - 1;
+    group.ids.forEach((id, index) => {
+      const relative = index - 1;
       layouts.set(id, {
-        x: group.center.x + vx * offsetIndex,
-        y: group.center.y + vy * offsetIndex,
-        radius: TRACK_RADIUS,
+        id,
+        axis: group.axis,
+        cx: group.center[0] + group.offset[0] * relative,
+        cy: group.center[1] + group.offset[1] * relative,
       });
     });
   }
@@ -76,32 +77,25 @@ function createTrackLayouts(): Map<OrbitTrackId, TrackLayout> {
   return layouts;
 }
 
-const TRACK_LAYOUTS = createTrackLayouts();
+const TRACK_LAYOUTS = createLayouts();
 
-interface DragState {
-  trackId: OrbitTrackId;
-  move: MoveTarget;
-  centerClientX: number;
-  centerClientY: number;
-  startAngle: number;
-  committed: boolean;
+function pointOnCircle(cx: number, cy: number, radius: number, angleDegrees: number) {
+  const angle = (angleDegrees * Math.PI) / 180;
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius,
+  };
 }
 
-function normalizeAngleDelta(delta: number): number {
-  let normalized = delta;
-  if (normalized > Math.PI) normalized -= Math.PI * 2;
-  if (normalized < -Math.PI) normalized += Math.PI * 2;
-  return normalized;
-}
-
-function clientCenter(
+function clientToSvg(
+  event: React.PointerEvent<SVGElement>,
   svg: SVGSVGElement,
-  layout: TrackLayout,
 ): { x: number; y: number } {
   const rect = svg.getBoundingClientRect();
+
   return {
-    x: rect.left + (layout.x / VIEW) * rect.width,
-    y: rect.top + (layout.y / VIEW) * rect.height,
+    x: ((event.clientX - rect.left) / rect.width) * VIEW_WIDTH,
+    y: ((event.clientY - rect.top) / rect.height) * VIEW_HEIGHT,
   };
 }
 
@@ -109,157 +103,165 @@ export function OrbitGraph() {
   const cubies = useGameStore((state) => state.cubies);
   const applyMove = useGameStore((state) => state.applyMove);
   const tracks = useMemo(() => buildOrbitTracks(cubies), [cubies]);
-  const drag = useRef<DragState | null>(null);
-  const [activeTrackId, setActiveTrackId] = useState<OrbitTrackId | null>(null);
-
-  const commitDrag = (
-    event: ReactPointerEvent<SVGCircleElement>,
-    threshold: number,
-  ) => {
-    const state = drag.current;
-    if (!state || state.committed) return;
-
-    const endAngle = Math.atan2(
-      event.clientY - state.centerClientY,
-      event.clientX - state.centerClientX,
-    );
-    const delta = normalizeAngleDelta(endAngle - state.startAngle);
-    if (Math.abs(delta) < threshold) return;
-
-    const direction: MoveDirection = delta > 0 ? 1 : -1;
-    applyMove({ face: state.move, direction });
-    state.committed = true;
-  };
+  const gesture = useRef<TrackGesture | null>(null);
 
   const beginTrackDrag = (
-    event: ReactPointerEvent<SVGCircleElement>,
+    event: React.PointerEvent<SVGElement>,
     track: OrbitTrack,
     layout: TrackLayout,
   ) => {
+    if (!track.face) return;
+
     event.preventDefault();
     event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
 
     const svg = event.currentTarget.ownerSVGElement;
     if (!svg) return;
-    const center = clientCenter(svg, layout);
 
-    drag.current = {
-      trackId: track.id,
-      move: track.move,
-      centerClientX: center.x,
-      centerClientY: center.y,
-      startAngle: Math.atan2(event.clientY - center.y, event.clientX - center.x),
+    const point = clientToSvg(event, svg);
+    gesture.current = {
+      face: track.face,
+      startX: point.x,
+      startY: point.y,
+      centerX: layout.cx,
+      centerY: layout.cy,
       committed: false,
+      pointerId: event.pointerId,
     };
-    setActiveTrackId(track.id);
+
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
-  const finishTrackDrag = (event: ReactPointerEvent<SVGCircleElement>) => {
-    commitDrag(event, DRAG_RELEASE_RADIANS);
-    drag.current = null;
-    setActiveTrackId(null);
+  const updateTrackDrag = (event: React.PointerEvent<SVGElement>) => {
+    const current = gesture.current;
+    if (!current || current.committed || current.pointerId !== event.pointerId) return;
+
+    const svg = event.currentTarget.ownerSVGElement;
+    if (!svg) return;
+
+    const point = clientToSvg(event, svg);
+    const dx = point.x - current.startX;
+    const dy = point.y - current.startY;
+
+    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+
+    const radialX = current.startX - current.centerX;
+    const radialY = current.startY - current.centerY;
+    const tangentX = -radialY;
+    const tangentY = radialX;
+    const tangentDot = dx * tangentX + dy * tangentY;
+
+    const direction: MoveDirection = tangentDot >= 0 ? 1 : -1;
+    current.committed = true;
+    applyMove({ face: current.face, direction });
+  };
+
+  const finishTrackDrag = (event: React.PointerEvent<SVGElement>) => {
+    updateTrackDrag(event);
+    gesture.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
   return (
     <div className="graph-shell">
       <svg
         className="orbit-graph"
-        viewBox={`0 0 ${VIEW} ${VIEW}`}
+        viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
         role="img"
-        aria-label="Three linked orbit groups representing cube slice movement"
+        aria-label="Nine linked slice circles arranged as three offset orbit groups"
       >
         <defs>
-          <filter id="orbit-node-glow" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="2.4" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          <filter id="orbit-node-glow" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="2.2" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
           </filter>
         </defs>
 
-        {GROUP_LAYOUTS.map((group) => (
-          <text
-            key={`axis-${group.axis}`}
-            className="orbit-axis-label"
-            x={group.center.x}
-            y={group.center.y}
-            textAnchor="middle"
-            dominantBaseline="central"
-          >
-            {group.axis.toUpperCase()}
-          </text>
-        ))}
-
-        <g className="orbit-tracks">
+        <g className="orbit-track-lines">
           {tracks.map((track) => {
             const layout = TRACK_LAYOUTS.get(track.id);
             if (!layout) return null;
-            const active = activeTrackId === track.id;
 
             return (
-              <g
-                key={track.id}
-                className={`orbit-track ${track.interactive ? 'interactive' : 'structural'}${active ? ' active' : ''}`}
-              >
+              <g key={track.id} className={track.interactive ? 'orbit-track interactive' : 'orbit-track middle'}>
                 <circle
-                  className="orbit-track-line"
-                  cx={layout.x}
-                  cy={layout.y}
-                  r={layout.radius}
+                  cx={layout.cx}
+                  cy={layout.cy}
+                  r={TRACK_RADIUS}
+                  className="orbit-track-visible"
                 />
-
-                {track.groups.map((group, groupIndex) => {
-                  const baseAngle = GROUP_NODE_ANGLES[groupIndex] ?? 0;
-                  return group.stickers.map((sticker, stickerIndex) => {
-                    const angle = baseAngle + (NODE_SPREAD[stickerIndex] ?? 0);
-                    const point = polarPoint(layout, layout.radius, angle);
-                    return (
-                      <circle
-                        key={sticker.id}
-                        className="orbit-sticker"
-                        cx={point.x}
-                        cy={point.y}
-                        r="4.7"
-                        fill={sticker.color}
-                        pointerEvents="none"
-                      />
-                    );
-                  });
-                })}
-
-                {(() => {
-                  const labelPoint = polarPoint(layout, layout.radius, TRACK_LABEL_ANGLES[track.move]);
-                  const isFace = (['U', 'D', 'L', 'R', 'F', 'B'] as readonly string[]).includes(track.move);
-                  const fill = isFace ? FACE_COLORS[track.move as Face] : '#94a3b8';
-                  return (
-                    <g className="orbit-face-label" pointerEvents="none">
-                      <circle cx={labelPoint.x} cy={labelPoint.y} r="11" fill={fill} />
-                      <text
-                        x={labelPoint.x}
-                        y={labelPoint.y}
-                        textAnchor="middle"
-                        dominantBaseline="central"
-                      >
-                        {track.move}
-                      </text>
-                    </g>
-                  );
-                })()}
-
-                {(
+                {track.interactive && (
                   <circle
+                    cx={layout.cx}
+                    cy={layout.cy}
+                    r={TRACK_RADIUS}
                     className="orbit-track-hit"
-                    cx={layout.x}
-                    cy={layout.y}
-                    r={layout.radius}
                     onPointerDown={(event) => beginTrackDrag(event, track, layout)}
-                    onPointerMove={(event) => commitDrag(event, DRAG_COMMIT_RADIANS)}
+                    onPointerMove={updateTrackDrag}
                     onPointerUp={finishTrackDrag}
-                    onPointerCancel={() => {
-                      drag.current = null;
-                      setActiveTrackId(null);
-                    }}
+                    onPointerCancel={() => { gesture.current = null; }}
                   />
                 )}
+              </g>
+            );
+          })}
+        </g>
+
+        <g className="orbit-stickers">
+          {tracks.flatMap((track) => {
+            const layout = TRACK_LAYOUTS.get(track.id);
+            if (!layout) return [];
+
+            return track.groups.flatMap((group, groupIndex) =>
+              group.stickers.map((sticker, stickerIndex) => {
+                const angle =
+                  GROUP_ANGLES[groupIndex]! +
+                  STICKER_ANGLE_OFFSETS[stickerIndex % STICKER_ANGLE_OFFSETS.length]!;
+                const point = pointOnCircle(layout.cx, layout.cy, TRACK_RADIUS, angle);
+
+                return (
+                  <circle
+                    key={sticker.id}
+                    cx={point.x}
+                    cy={point.y}
+                    r={NODE_RADIUS}
+                    fill={sticker.color}
+                    className={track.interactive ? 'orbit-sticker interactive' : 'orbit-sticker'}
+                    onPointerDown={
+                      track.interactive
+                        ? (event) => beginTrackDrag(event, track, layout)
+                        : undefined
+                    }
+                    onPointerMove={track.interactive ? updateTrackDrag : undefined}
+                    onPointerUp={track.interactive ? finishTrackDrag : undefined}
+                    onPointerCancel={
+                      track.interactive
+                        ? () => { gesture.current = null; }
+                        : undefined
+                    }
+                  >
+                    <title>{`${track.id} slice · ${group.face} strip · ${sticker.homeFace} sticker`}</title>
+                  </circle>
+                );
+              }),
+            );
+          })}
+        </g>
+
+        <g className="orbit-track-labels" pointerEvents="none">
+          {tracks.map((track) => {
+            if (!track.face) return null;
+            const layout = TRACK_LAYOUTS.get(track.id);
+            if (!layout) return null;
+            const label = pointOnCircle(layout.cx, layout.cy, TRACK_RADIUS + 18, -90);
+
+            return (
+              <g key={`label-${track.id}`} transform={`translate(${label.x} ${label.y})`}>
+                <circle r="10" />
+                <text textAnchor="middle" dominantBaseline="central">{track.face}</text>
               </g>
             );
           })}
@@ -268,8 +270,8 @@ export function OrbitGraph() {
 
       <div className="graph-instructions">
         <small>
-          Three axis groups × three offset slice circles. Each circle shows four groups of three traveling stickers.
-          Drag a labeled outer circle for one legal 90° face turn.
+          Three offset-circle groups · each circle carries four groups of three stickers.
+          Drag a sticker or labeled outer slice clockwise/counter-clockwise to make the same legal cube turn.
         </small>
       </div>
     </div>
