@@ -29,7 +29,9 @@ function Header() {
   const historyLength = useGameStore((state) => state.history.length);
   const futureLength = useGameStore((state) => state.future.length);
   const orbitMode = useGameStore((state) => state.orbitMode);
+  const showSwipeHints = useGameStore((state) => state.showSwipeHints);
   const setOrbitMode = useGameStore((state) => state.setOrbitMode);
+  const setShowSwipeHints = useGameStore((state) => state.setShowSwipeHints);
   const undo = useGameStore((state) => state.undo);
   const redo = useGameStore((state) => state.redo);
   const restart = useGameStore((state) => state.restart);
@@ -56,6 +58,14 @@ function Header() {
       <div className="header-actions">
         <button type="button" className={orbitMode ? 'toggle active' : 'toggle'} onClick={() => setOrbitMode(!orbitMode)}>
           {orbitMode ? 'Orbit on' : 'Orbit view'}
+        </button>
+        <button
+          type="button"
+          className={showSwipeHints ? 'toggle active' : 'toggle'}
+          onClick={() => setShowSwipeHints(!showSwipeHints)}
+          aria-pressed={showSwipeHints}
+        >
+          {showSwipeHints ? 'Swipe hints on' : 'Swipe hints'}
         </button>
         <button type="button" onClick={undo} disabled={historyLength === 0}>Undo</button>
         <button type="button" onClick={redo} disabled={futureLength === 0}>Redo</button>
