@@ -54,7 +54,9 @@ npm run preview
 
 ### Cube
 
-- Drag a colored sticker: turn that face clockwise/counter-clockwise based on drag direction.
+- Swipe a colored sticker: the row or column crossing that exact sticker moves with your drag.
+- Horizontal/vertical intent is resolved in screen space, so the same interaction remains intuitive after rotating the camera.
+- Center stickers provide access to middle-row / middle-column slice turns.
 - Right mouse drag: inspect the cube camera.
 - `Orbit view`: enables left-drag camera orbit for deliberate inspection.
 - Two-finger gesture on touch devices: camera zoom/orbit.
