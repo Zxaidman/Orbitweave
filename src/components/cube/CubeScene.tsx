@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Euler, MOUSE, Matrix4, Quaternion, TOUCH, Vector3 } from 'three';
-import { useEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Group } from 'three';
 import {
   FACE_COLORS,
@@ -20,7 +20,7 @@ import {
 import { useGameStore } from '@/store/gameStore';
 
 const SPACING = 1.04;
-const ANIMATION_SECONDS = 0.2;
+const ANIMATION_SECONDS = 0.34;
 const DRAG_THRESHOLD = 10;
 const CUBE_ROTATION = new Euler(-0.08, 0.18, 0);
 
@@ -31,12 +31,18 @@ const AXIS_VECTOR: Record<Axis, Vector3> = {
   z: new Vector3(0, 0, 1),
 };
 
+const HINT_ARROWS = [
+  { position: [0, 0.255, 0.045] as const, rotation: [0, 0, 0] as const },
+  { position: [0.255, 0, 0.045] as const, rotation: [0, 0, -Math.PI / 2] as const },
+  { position: [0, -0.255, 0.045] as const, rotation: [0, 0, Math.PI] as const },
+  { position: [-0.255, 0, 0.045] as const, rotation: [0, 0, Math.PI / 2] as const },
+] as const;
+
 interface StickerGesture {
   x: number;
   y: number;
   position: Vec3;
   faceNormal: Vec3;
-  committed: boolean;
 }
 
 interface AnimatedCubieProps {
@@ -65,6 +71,35 @@ function localStickerQuaternion(normal: Vec3): Quaternion {
   );
 }
 
+function smootherStep(value: number): number {
+  return value * value * value * (value * (value * 6 - 15) + 10);
+}
+
+function SwipeHintArrows() {
+  return (
+    <group>
+      {HINT_ARROWS.map((arrow, index) => (
+        <mesh
+          key={index}
+          position={arrow.position}
+          rotation={arrow.rotation}
+          raycast={() => null}
+          renderOrder={10}
+        >
+          <coneGeometry args={[0.065, 0.15, 3]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.96}
+            depthTest={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
 function AnimatedCubie({
   previous,
   current,
@@ -75,7 +110,12 @@ function AnimatedCubie({
   const groupRef = useRef<Group>(null);
   const startedAt = useRef(0);
   const pointerStart = useRef<StickerGesture | null>(null);
+  const pendingMove = useRef<Move | null>(null);
+  const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
+
   const applyMove = useGameStore((state) => state.applyMove);
+  const showSwipeHints = useGameStore((state) => state.showSwipeHints);
+  const animationEndAt = useGameStore((state) => state.animationEndAt);
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
 
@@ -89,7 +129,7 @@ function AnimatedCubie({
   );
   const stickers = useMemo(() => homeStickerNormals(current), [current.home]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     startedAt.current = performance.now() / 1000;
   }, [animationKey]);
 
@@ -99,7 +139,7 @@ function AnimatedCubie({
 
     const elapsed = performance.now() / 1000 - startedAt.current;
     const raw = Math.min(1, Math.max(0, elapsed / ANIMATION_SECONDS));
-    const t = 1 - Math.pow(1 - raw, 3);
+    const t = smootherStep(raw);
 
     if (lastMove) {
       const rotation = getMoveRotation(lastMove);
@@ -182,8 +222,15 @@ function AnimatedCubie({
     return bestMove;
   };
 
+  const clearStickerGesture = (event?: any) => {
+    pointerStart.current = null;
+    pendingMove.current = null;
+    setSelectedSticker(null);
+    if (event) event.target.releasePointerCapture?.(event.pointerId);
+  };
+
   const startStickerDrag = (event: any, homeNormal: Vec3) => {
-    if (orbitMode || event.button === 2) return;
+    if (orbitMode || event.button === 2 || Date.now() < animationEndAt) return;
 
     event.stopPropagation();
 
@@ -192,39 +239,43 @@ function AnimatedCubie({
       y: event.clientY,
       position: [...current.position] as Vec3,
       faceNormal: transformVec(current.orientation, homeNormal),
-      committed: false,
     };
+    pendingMove.current = null;
+    setSelectedSticker(homeNormal.join(','));
 
     event.target.setPointerCapture?.(event.pointerId);
   };
 
   const updateStickerDrag = (event: any) => {
     const start = pointerStart.current;
-    if (!start || start.committed || orbitMode) return;
+    if (!start || orbitMode) return;
 
     event.stopPropagation();
 
-    const dragX = event.clientX - start.x;
-    const dragY = event.clientY - start.y;
-    if (Math.hypot(dragX, dragY) < DRAG_THRESHOLD) return;
+    pendingMove.current = chooseStickerMove(
+      start.position,
+      start.faceNormal,
+      event.clientX - start.x,
+      event.clientY - start.y,
+    );
+  };
+
+  const finishStickerDrag = (event: any) => {
+    const start = pointerStart.current;
+    if (!start) return;
+
+    event.stopPropagation();
 
     const move = chooseStickerMove(
       start.position,
       start.faceNormal,
-      dragX,
-      dragY,
-    );
+      event.clientX - start.x,
+      event.clientY - start.y,
+    ) ?? pendingMove.current;
 
-    if (!move) return;
+    clearStickerGesture(event);
 
-    start.committed = true;
-    applyMove(move);
-  };
-
-  const finishStickerDrag = (event: any) => {
-    updateStickerDrag(event);
-    pointerStart.current = null;
-    event.target.releasePointerCapture?.(event.pointerId);
+    if (move) applyMove(move);
   };
 
   return (
@@ -237,19 +288,29 @@ function AnimatedCubie({
       {stickers.map((normal) => {
         const face = faceForNormal(normal);
         const q = localStickerQuaternion(normal);
+        const stickerKey = normal.join(',');
+        const selected = selectedSticker === stickerKey;
 
         return (
           <mesh
-            key={`${current.id}-${normal.join(',')}`}
+            key={`${current.id}-${stickerKey}`}
             position={[normal[0] * 0.493, normal[1] * 0.493, normal[2] * 0.493]}
             quaternion={q}
+            scale={selected ? 1.035 : 1}
             onPointerDown={(event) => startStickerDrag(event, normal)}
             onPointerMove={updateStickerDrag}
             onPointerUp={finishStickerDrag}
-            onPointerCancel={() => { pointerStart.current = null; }}
+            onPointerCancel={(event) => clearStickerGesture(event)}
           >
             <boxGeometry args={[0.78, 0.78, 0.028]} />
-            <meshStandardMaterial color={FACE_COLORS[face]} roughness={0.34} />
+            <meshStandardMaterial
+              color={FACE_COLORS[face]}
+              emissive={selected ? FACE_COLORS[face] : '#000000'}
+              emissiveIntensity={selected ? 0.72 : 0}
+              roughness={selected ? 0.2 : 0.34}
+            />
+
+            {selected && showSwipeHints && <SwipeHintArrows />}
           </mesh>
         );
       })}
