@@ -9,10 +9,10 @@ import {
   faceForNormal,
   getMoveRotation,
   homeStickerNormals,
+  stickerSliceTargets,
   transformVec,
   type Axis,
   type Cubie,
-  type Face,
   type Mat3,
   type Move,
   type MoveDirection,
@@ -35,9 +35,8 @@ const AXIS_VECTOR: Record<Axis, Vector3> = {
 interface StickerGesture {
   x: number;
   y: number;
-  face: Face;
-  clockwiseX: number;
-  clockwiseY: number;
+  position: Vec3;
+  faceNormal: Vec3;
   committed: boolean;
 }
 
@@ -65,16 +64,6 @@ function localStickerQuaternion(normal: Vec3): Quaternion {
     new Vector3(0, 0, 1),
     new Vector3(normal[0], normal[1], normal[2]),
   );
-}
-
-function referencePosition(face: Face, position: Vec3): Vec3 {
-  const [x, y, z] = position;
-
-  if ((face === 'U' || face === 'D') && x === 0 && z === 0) return [1, y, 0];
-  if ((face === 'R' || face === 'L') && y === 0 && z === 0) return [x, 1, 0];
-  if ((face === 'F' || face === 'B') && x === 0 && y === 0) return [1, 0, z];
-
-  return position;
 }
 
 function AnimatedCubie({
@@ -139,45 +128,71 @@ function AnimatedCubie({
     group.quaternion.copy(previousQuaternion).slerp(currentQuaternion, t);
   });
 
-  const clockwiseScreenVector = (face: Face): { x: number; y: number } => {
-    const probePosition = referencePosition(face, current.position);
-    const probe: Cubie = { ...current, position: probePosition };
-    const turned = applyCubeMove([probe], { face, direction: 1 })[0] ?? probe;
-
-    const before = new Vector3(...probePosition)
-      .multiplyScalar(SPACING)
-      .applyEuler(CUBE_ROTATION)
-      .project(camera);
-    const after = new Vector3(...turned.position)
+  const projectPosition = (position: Vec3): { x: number; y: number } => {
+    const projected = new Vector3(...position)
       .multiplyScalar(SPACING)
       .applyEuler(CUBE_ROTATION)
       .project(camera);
 
-    const beforeX = (before.x + 1) * size.width * 0.5;
-    const beforeY = (1 - before.y) * size.height * 0.5;
-    const afterX = (after.x + 1) * size.width * 0.5;
-    const afterY = (1 - after.y) * size.height * 0.5;
-    const dx = afterX - beforeX;
-    const dy = afterY - beforeY;
-    const length = Math.hypot(dx, dy) || 1;
+    return {
+      x: (projected.x + 1) * size.width * 0.5,
+      y: (1 - projected.y) * size.height * 0.5,
+    };
+  };
 
-    return { x: dx / length, y: dy / length };
+  const chooseStickerMove = (
+    position: Vec3,
+    faceNormal: Vec3,
+    dragX: number,
+    dragY: number,
+  ): Move | null => {
+    const dragLength = Math.hypot(dragX, dragY);
+    if (dragLength < DRAG_THRESHOLD) return null;
+
+    const dragUnitX = dragX / dragLength;
+    const dragUnitY = dragY / dragLength;
+    const before = projectPosition(position);
+    const targets = stickerSliceTargets(position, faceNormal);
+
+    let bestMove: Move | null = null;
+    let bestScore = -Infinity;
+
+    for (const target of targets) {
+      for (const direction of [1, -1] as const satisfies readonly MoveDirection[]) {
+        const probe: Cubie = { ...current, position };
+        const turned = applyCubeMove([probe], { face: target, direction })[0];
+        if (!turned) continue;
+
+        const after = projectPosition(turned.position);
+        const moveX = after.x - before.x;
+        const moveY = after.y - before.y;
+        const moveLength = Math.hypot(moveX, moveY);
+        if (moveLength < 0.001) continue;
+
+        const score =
+          dragUnitX * (moveX / moveLength) +
+          dragUnitY * (moveY / moveLength);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = { face: target, direction };
+        }
+      }
+    }
+
+    return bestMove;
   };
 
   const startStickerDrag = (event: any, homeNormal: Vec3) => {
     if (orbitMode || event.button === 2) return;
 
     event.stopPropagation();
-    const worldNormal = transformVec(current.orientation, homeNormal);
-    const face = faceForNormal(worldNormal);
-    const clockwise = clockwiseScreenVector(face);
 
     pointerStart.current = {
       x: event.clientX,
       y: event.clientY,
-      face,
-      clockwiseX: clockwise.x,
-      clockwiseY: clockwise.y,
+      position: [...current.position] as Vec3,
+      faceNormal: transformVec(current.orientation, homeNormal),
       committed: false,
     };
 
@@ -189,15 +204,22 @@ function AnimatedCubie({
     if (!start || start.committed || orbitMode) return;
 
     event.stopPropagation();
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
 
-    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    const dragX = event.clientX - start.x;
+    const dragY = event.clientY - start.y;
+    if (Math.hypot(dragX, dragY) < DRAG_THRESHOLD) return;
 
-    const dot = dx * start.clockwiseX + dy * start.clockwiseY;
-    const direction: MoveDirection = dot >= 0 ? 1 : -1;
+    const move = chooseStickerMove(
+      start.position,
+      start.faceNormal,
+      dragX,
+      dragY,
+    );
+
+    if (!move) return;
+
     start.committed = true;
-    applyMove({ face: start.face, direction });
+    applyMove(move);
   };
 
   const finishStickerDrag = (event: any) => {
