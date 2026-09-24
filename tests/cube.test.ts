@@ -9,6 +9,8 @@ import {
   isSolved,
   sameMatrix,
   sameVec,
+  stickerSliceTargets,
+  moveTargetForAxisLayer,
   type Move,
 } from '../src/game/cube';
 import {
@@ -40,6 +42,29 @@ describe('cube engine', () => {
       expect(sameVec(cubie.position, original!.position)).toBe(true);
       expect(sameMatrix(cubie.orientation, original!.orientation)).toBe(true);
     }
+  });
+
+  it('maps axis layers to the nine legal slice targets', () => {
+    expect(moveTargetForAxisLayer('x', -1)).toBe('L');
+    expect(moveTargetForAxisLayer('x', 0)).toBe('M');
+    expect(moveTargetForAxisLayer('x', 1)).toBe('R');
+    expect(moveTargetForAxisLayer('y', -1)).toBe('D');
+    expect(moveTargetForAxisLayer('y', 0)).toBe('E');
+    expect(moveTargetForAxisLayer('y', 1)).toBe('U');
+    expect(moveTargetForAxisLayer('z', -1)).toBe('B');
+    expect(moveTargetForAxisLayer('z', 0)).toBe('S');
+    expect(moveTargetForAxisLayer('z', 1)).toBe('F');
+  });
+
+  it('derives two legal row/column slices from a selected front-face sticker', () => {
+    expect(stickerSliceTargets([1, 1, 1], [0, 0, 1])).toEqual(['R', 'U']);
+    expect(stickerSliceTargets([0, 1, 1], [0, 0, 1])).toEqual(['M', 'U']);
+    expect(stickerSliceTargets([0, 0, 1], [0, 0, 1])).toEqual(['M', 'E']);
+  });
+
+  it('derives two legal row/column slices on side and top faces', () => {
+    expect(stickerSliceTargets([1, 0, 0], [1, 0, 0])).toEqual(['E', 'S']);
+    expect(stickerSliceTargets([0, 1, 0], [0, 1, 0])).toEqual(['M', 'S']);
   });
 
   it('creates scrambles without repeating the same face consecutively', () => {
