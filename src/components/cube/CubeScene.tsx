@@ -1,7 +1,7 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import { Euler, MOUSE, Matrix4, Quaternion, TOUCH, Vector3 } from 'three';
-import { useEffect, useMemo, useRef } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Group } from 'three';
 import {
   FACE_COLORS,
@@ -9,19 +9,18 @@ import {
   faceForNormal,
   getMoveRotation,
   homeStickerNormals,
+  stickerSliceTargets,
   transformVec,
   type Axis,
   type Cubie,
-  type Face,
   type Mat3,
   type Move,
-  type MoveDirection,
   type Vec3,
 } from '@/game/cube';
 import { useGameStore } from '@/store/gameStore';
 
 const SPACING = 1.04;
-const ANIMATION_SECONDS = 0.2;
+const ANIMATION_SECONDS = 0.34;
 const DRAG_THRESHOLD = 10;
 const CUBE_ROTATION = new Euler(-0.08, 0.18, 0);
 
@@ -32,13 +31,18 @@ const AXIS_VECTOR: Record<Axis, Vector3> = {
   z: new Vector3(0, 0, 1),
 };
 
+const HINT_ARROWS = [
+  { position: [0, 0.255, 0.045] as const, rotation: [0, 0, 0] as const },
+  { position: [0.255, 0, 0.045] as const, rotation: [0, 0, -Math.PI / 2] as const },
+  { position: [0, -0.255, 0.045] as const, rotation: [0, 0, Math.PI] as const },
+  { position: [-0.255, 0, 0.045] as const, rotation: [0, 0, Math.PI / 2] as const },
+] as const;
+
 interface StickerGesture {
   x: number;
   y: number;
-  face: Face;
-  clockwiseX: number;
-  clockwiseY: number;
-  committed: boolean;
+  position: Vec3;
+  faceNormal: Vec3;
 }
 
 interface AnimatedCubieProps {
@@ -67,14 +71,33 @@ function localStickerQuaternion(normal: Vec3): Quaternion {
   );
 }
 
-function referencePosition(face: Face, position: Vec3): Vec3 {
-  const [x, y, z] = position;
+function smootherStep(value: number): number {
+  return value * value * value * (value * (value * 6 - 15) + 10);
+}
 
-  if ((face === 'U' || face === 'D') && x === 0 && z === 0) return [1, y, 0];
-  if ((face === 'R' || face === 'L') && y === 0 && z === 0) return [x, 1, 0];
-  if ((face === 'F' || face === 'B') && x === 0 && y === 0) return [1, 0, z];
-
-  return position;
+function SwipeHintArrows() {
+  return (
+    <group>
+      {HINT_ARROWS.map((arrow, index) => (
+        <mesh
+          key={index}
+          position={arrow.position}
+          rotation={arrow.rotation}
+          raycast={() => null}
+          renderOrder={10}
+        >
+          <coneGeometry args={[0.065, 0.15, 3]} />
+          <meshBasicMaterial
+            color="#ffffff"
+            transparent
+            opacity={0.96}
+            depthTest={false}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
 }
 
 function AnimatedCubie({
@@ -87,7 +110,12 @@ function AnimatedCubie({
   const groupRef = useRef<Group>(null);
   const startedAt = useRef(0);
   const pointerStart = useRef<StickerGesture | null>(null);
+  const pendingMove = useRef<Move | null>(null);
+  const [selectedSticker, setSelectedSticker] = useState<string | null>(null);
+
   const applyMove = useGameStore((state) => state.applyMove);
+  const showSwipeHints = useGameStore((state) => state.showSwipeHints);
+  const animationEndAt = useGameStore((state) => state.animationEndAt);
   const camera = useThree((state) => state.camera);
   const size = useThree((state) => state.size);
 
@@ -101,7 +129,7 @@ function AnimatedCubie({
   );
   const stickers = useMemo(() => homeStickerNormals(current), [current.home]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     startedAt.current = performance.now() / 1000;
   }, [animationKey]);
 
@@ -111,7 +139,7 @@ function AnimatedCubie({
 
     const elapsed = performance.now() / 1000 - startedAt.current;
     const raw = Math.min(1, Math.max(0, elapsed / ANIMATION_SECONDS));
-    const t = 1 - Math.pow(1 - raw, 3);
+    const t = smootherStep(raw);
 
     if (lastMove) {
       const rotation = getMoveRotation(lastMove);
@@ -139,71 +167,115 @@ function AnimatedCubie({
     group.quaternion.copy(previousQuaternion).slerp(currentQuaternion, t);
   });
 
-  const clockwiseScreenVector = (face: Face): { x: number; y: number } => {
-    const probePosition = referencePosition(face, current.position);
-    const probe: Cubie = { ...current, position: probePosition };
-    const turned = applyCubeMove([probe], { face, direction: 1 })[0] ?? probe;
-
-    const before = new Vector3(...probePosition)
-      .multiplyScalar(SPACING)
-      .applyEuler(CUBE_ROTATION)
-      .project(camera);
-    const after = new Vector3(...turned.position)
+  const projectPosition = (position: Vec3): { x: number; y: number } => {
+    const projected = new Vector3(...position)
       .multiplyScalar(SPACING)
       .applyEuler(CUBE_ROTATION)
       .project(camera);
 
-    const beforeX = (before.x + 1) * size.width * 0.5;
-    const beforeY = (1 - before.y) * size.height * 0.5;
-    const afterX = (after.x + 1) * size.width * 0.5;
-    const afterY = (1 - after.y) * size.height * 0.5;
-    const dx = afterX - beforeX;
-    const dy = afterY - beforeY;
-    const length = Math.hypot(dx, dy) || 1;
+    return {
+      x: (projected.x + 1) * size.width * 0.5,
+      y: (1 - projected.y) * size.height * 0.5,
+    };
+  };
 
-    return { x: dx / length, y: dy / length };
+  const chooseStickerMove = (
+    position: Vec3,
+    faceNormal: Vec3,
+    dragX: number,
+    dragY: number,
+  ): Move | null => {
+    const dragLength = Math.hypot(dragX, dragY);
+    if (dragLength < DRAG_THRESHOLD) return null;
+
+    const dragUnitX = dragX / dragLength;
+    const dragUnitY = dragY / dragLength;
+    const before = projectPosition(position);
+    const targets = stickerSliceTargets(position, faceNormal);
+
+    let bestMove: Move | null = null;
+    let bestScore = -Infinity;
+
+    for (const target of targets) {
+      for (const direction of [1, -1] as const) {
+        const probe: Cubie = { ...current, position };
+        const turned = applyCubeMove([probe], { face: target, direction })[0];
+        if (!turned) continue;
+
+        const after = projectPosition(turned.position);
+        const moveX = after.x - before.x;
+        const moveY = after.y - before.y;
+        const moveLength = Math.hypot(moveX, moveY);
+        if (moveLength < 0.001) continue;
+
+        const score =
+          dragUnitX * (moveX / moveLength) +
+          dragUnitY * (moveY / moveLength);
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMove = { face: target, direction };
+        }
+      }
+    }
+
+    return bestMove;
+  };
+
+  const clearStickerGesture = (event?: any) => {
+    pointerStart.current = null;
+    pendingMove.current = null;
+    setSelectedSticker(null);
+    if (event) event.target.releasePointerCapture?.(event.pointerId);
   };
 
   const startStickerDrag = (event: any, homeNormal: Vec3) => {
-    if (orbitMode || event.button === 2) return;
+    if (orbitMode || event.button === 2 || Date.now() < animationEndAt) return;
 
     event.stopPropagation();
-    const worldNormal = transformVec(current.orientation, homeNormal);
-    const face = faceForNormal(worldNormal);
-    const clockwise = clockwiseScreenVector(face);
 
     pointerStart.current = {
       x: event.clientX,
       y: event.clientY,
-      face,
-      clockwiseX: clockwise.x,
-      clockwiseY: clockwise.y,
-      committed: false,
+      position: [...current.position] as Vec3,
+      faceNormal: transformVec(current.orientation, homeNormal),
     };
+    pendingMove.current = null;
+    setSelectedSticker(homeNormal.join(','));
 
     event.target.setPointerCapture?.(event.pointerId);
   };
 
   const updateStickerDrag = (event: any) => {
     const start = pointerStart.current;
-    if (!start || start.committed || orbitMode) return;
+    if (!start || orbitMode) return;
 
     event.stopPropagation();
-    const dx = event.clientX - start.x;
-    const dy = event.clientY - start.y;
 
-    if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-
-    const dot = dx * start.clockwiseX + dy * start.clockwiseY;
-    const direction: MoveDirection = dot >= 0 ? 1 : -1;
-    start.committed = true;
-    applyMove({ face: start.face, direction });
+    pendingMove.current = chooseStickerMove(
+      start.position,
+      start.faceNormal,
+      event.clientX - start.x,
+      event.clientY - start.y,
+    );
   };
 
   const finishStickerDrag = (event: any) => {
-    updateStickerDrag(event);
-    pointerStart.current = null;
-    event.target.releasePointerCapture?.(event.pointerId);
+    const start = pointerStart.current;
+    if (!start) return;
+
+    event.stopPropagation();
+
+    const move = chooseStickerMove(
+      start.position,
+      start.faceNormal,
+      event.clientX - start.x,
+      event.clientY - start.y,
+    ) ?? pendingMove.current;
+
+    clearStickerGesture(event);
+
+    if (move) applyMove(move);
   };
 
   return (
@@ -216,19 +288,29 @@ function AnimatedCubie({
       {stickers.map((normal) => {
         const face = faceForNormal(normal);
         const q = localStickerQuaternion(normal);
+        const stickerKey = normal.join(',');
+        const selected = selectedSticker === stickerKey;
 
         return (
           <mesh
-            key={`${current.id}-${normal.join(',')}`}
+            key={`${current.id}-${stickerKey}`}
             position={[normal[0] * 0.493, normal[1] * 0.493, normal[2] * 0.493]}
             quaternion={q}
+            scale={selected ? 1.035 : 1}
             onPointerDown={(event) => startStickerDrag(event, normal)}
             onPointerMove={updateStickerDrag}
             onPointerUp={finishStickerDrag}
-            onPointerCancel={() => { pointerStart.current = null; }}
+            onPointerCancel={(event) => clearStickerGesture(event)}
           >
             <boxGeometry args={[0.78, 0.78, 0.028]} />
-            <meshStandardMaterial color={FACE_COLORS[face]} roughness={0.34} />
+            <meshStandardMaterial
+              color={FACE_COLORS[face]}
+              emissive={selected ? FACE_COLORS[face] : '#000000'}
+              emissiveIntensity={selected ? 0.72 : 0}
+              roughness={selected ? 0.2 : 0.34}
+            />
+
+            {selected && showSwipeHints && <SwipeHintArrows />}
           </mesh>
         );
       })}

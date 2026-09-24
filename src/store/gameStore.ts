@@ -25,13 +25,16 @@ interface GameState {
   animationKey: number;
   lastMove: Move | null;
   orbitMode: boolean;
+  showSwipeHints: boolean;
   selectedNodeId: string | null;
+  animationEndAt: number;
   applyMove: (move: Move) => void;
   undo: () => void;
   redo: () => void;
   restart: () => void;
   newPuzzle: () => void;
   setOrbitMode: (enabled: boolean) => void;
+  setShowSwipeHints: (enabled: boolean) => void;
   setSelectedNode: (id: string | null) => void;
 }
 
@@ -63,10 +66,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   animationKey: 0,
   lastMove: null,
   orbitMode: false,
+  showSwipeHints: true,
   selectedNodeId: null,
+  animationEndAt: 0,
 
   applyMove: (move) => {
     const state = get();
+    if (Date.now() < state.animationEndAt) return;
     const next = applyCubeMove(state.cubies, move);
     set({
       previousCubies: state.cubies,
@@ -76,6 +82,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       moveCount: state.moveCount + 1,
       animationKey: state.animationKey + 1,
       lastMove: move,
+      animationEndAt: Date.now() + 340,
     });
   },
 
@@ -144,6 +151,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setOrbitMode: (orbitMode) => set({ orbitMode }),
+  setShowSwipeHints: (showSwipeHints) => set({ showSwipeHints }),
   setSelectedNode: (selectedNodeId) => set({ selectedNodeId }),
 }));
 

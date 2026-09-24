@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.4 - 2026-09-24
+
+### Changed
+
+- Replace face-owned cube swipes with a sticker-aware row/column rotation system.
+- A selected sticker now exposes exactly two slice axes, each with two drag directions: four legal movements per sticker.
+- Corner stickers can turn either intersecting outer row/column.
+- Edge stickers can turn one outer slice and one middle slice.
+- Center stickers can turn either of the two middle slices crossing that face.
+- Choose the final move by projecting all four legal candidate movements into screen space and matching the user's actual swipe direction.
+- Commit a swipe only when the pointer/finger is released; dragging only previews intent.
+- Brighten the selected sticker while it is held.
+- Show four directional arrows on the selected sticker, with a UI toggle to hide them once controls are familiar.
+- Slow face turns to 340 ms with smootherstep easing and briefly lock new moves during the animation to prevent overlapping jitter.
+- Keep graph behavior unchanged in this release so cube interaction can be validated independently.
+
+# Changelog
+
 ## 0.1.3 - 2026-09-23
 
 ### Changed
