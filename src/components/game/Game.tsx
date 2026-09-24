@@ -113,7 +113,7 @@ export function Game() {
               <span className="eyebrow">Physical view</span>
               <h2>3×3 Cube</h2>
             </div>
-            <span className="hint">Drag a sticker to turn · right-drag or Orbit view to inspect</span>
+            <span className="hint">Swipe any sticker · its selected row or column follows the drag</span>
           </div>
           <CubeScene />
         </article>
