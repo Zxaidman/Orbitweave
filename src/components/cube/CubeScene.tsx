@@ -15,7 +15,6 @@ import {
   type Cubie,
   type Mat3,
   type Move,
-  type MoveDirection,
   type Vec3,
 } from '@/game/cube';
 import { useGameStore } from '@/store/gameStore';
@@ -158,7 +157,7 @@ function AnimatedCubie({
     let bestScore = -Infinity;
 
     for (const target of targets) {
-      for (const direction of [1, -1] as const satisfies readonly MoveDirection[]) {
+      for (const direction of [1, -1] as const) {
         const probe: Cubie = { ...current, position };
         const turned = applyCubeMove([probe], { face: target, direction })[0];
         if (!turned) continue;
