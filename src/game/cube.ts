@@ -61,6 +61,30 @@ const MOVE_META: Record<MoveTarget, MoveMeta> = {
 
 const axisIndex: Record<Axis, 0 | 1 | 2> = { x: 0, y: 1, z: 2 };
 
+export function moveTargetForAxisLayer(axis: Axis, layer: -1 | 0 | 1): MoveTarget {
+  if (axis === 'x') return layer === -1 ? 'L' : layer === 0 ? 'M' : 'R';
+  if (axis === 'y') return layer === -1 ? 'D' : layer === 0 ? 'E' : 'U';
+  return layer === -1 ? 'B' : layer === 0 ? 'S' : 'F';
+}
+
+export function stickerSliceTargets(position: Vec3, faceNormal: Vec3): readonly [MoveTarget, MoveTarget] {
+  const normalAxis: Axis =
+    faceNormal[0] !== 0 ? 'x' :
+    faceNormal[1] !== 0 ? 'y' :
+    'z';
+
+  const tangentAxes = (['x', 'y', 'z'] as const).filter((axis) => axis !== normalAxis);
+  const firstAxis = tangentAxes[0]!;
+  const secondAxis = tangentAxes[1]!;
+  const firstLayer = position[axisIndex[firstAxis]] as -1 | 0 | 1;
+  const secondLayer = position[axisIndex[secondAxis]] as -1 | 0 | 1;
+
+  return [
+    moveTargetForAxisLayer(firstAxis, firstLayer),
+    moveTargetForAxisLayer(secondAxis, secondLayer),
+  ];
+}
+
 export interface MoveRotation {
   axis: Axis;
   layer: -1 | 0 | 1;
