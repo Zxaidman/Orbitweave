@@ -10,6 +10,10 @@
 - Edge stickers can turn one outer slice and one middle slice.
 - Center stickers can turn either of the two middle slices crossing that face.
 - Choose the final move by projecting all four legal candidate movements into screen space and matching the user's actual swipe direction.
+- Commit a swipe only when the pointer/finger is released; dragging only previews intent.
+- Brighten the selected sticker while it is held.
+- Show four directional arrows on the selected sticker, with a UI toggle to hide them once controls are familiar.
+- Slow face turns to 340 ms with smootherstep easing and briefly lock new moves during the animation to prevent overlapping jitter.
 - Keep graph behavior unchanged in this release so cube interaction can be validated independently.
 
 # Changelog
